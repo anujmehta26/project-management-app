@@ -2,20 +2,830 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 222.2 84% 4.9%;
+ 
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+ 
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+ 
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+ 
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+ 
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+ 
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+ 
+    --radius: 0.5rem;
+  }
+ 
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+ 
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+ 
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+ 
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+ 
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+ 
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+ 
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+ 
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+ 
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+ 
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* Update the body and html styles */
+html, body {
+  min-height: 100vh;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 body {
   color: var(--foreground);
-  background: var(--background);
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
   font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+}
+
+/* Custom scrollbar styles */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(155, 155, 155, 0.5) transparent;
+  transition: max-height 0.2s ease-in-out;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(155, 155, 155, 0.5);
+  border-radius: 20px;
+  border: transparent;
+}
+
+/* Update the glow effect to be more prominent and use a lighter blue */
+.glow-effect::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(
+    circle at 50% 0%, 
+    rgba(56, 189, 248, 0.12),  /* sky-400 with opacity */
+    rgba(59, 130, 246, 0.08) 45%,  /* blue-500 with opacity */
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: -1;
+  min-height: 100vh;
+  width: 100%;
+}
+
+/* Add a wrapper class for the content */
+.app-wrapper {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  width: 100%;
+  padding: 1rem;
+}
+
+/* Add a subtle noise texture for depth */
+.app-wrapper::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%' height='100%' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  opacity: 0.015;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Update the title styles */
+.title-gradient {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(
+    to right,
+    rgb(56, 189, 248),  /* sky-400 */
+    rgb(59, 130, 246)   /* blue-500 */
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 2rem;
+  line-height: 1.2;
+  padding: 0.3rem 0;
+  margin-right: 1rem;
+  text-transform: none;
+}
+
+/* Update card and input styles */
+.card {
+  box-shadow: none;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.input {
+  background-color: white;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/* Update body background for dark mode */
+.dark body {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+/* Update card styles for dark mode */
+.dark .card {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Update input styles for dark mode */
+.dark .input {
+  background-color: hsl(var(--input));
+  border-color: hsl(var(--border));
+}
+
+/* Override text colors in dark mode */
+.dark .text-gray-500,
+.dark .text-gray-600,
+.dark .text-gray-700,
+.dark .text-gray-900 {
+  color: #e2e8f0 !important; /* light gray for dark mode */
+}
+
+/* Keep button colors consistent in dark mode */
+.dark button,
+.dark .button {
+  color: inherit;
+}
+
+/* Keep background colors consistent for specific elements */
+.dark .bg-white,
+.dark .bg-gray-50 {
+  background-color: hsl(var(--card));
+}
+
+/* Keep text colors consistent for inputs and buttons */
+.dark input,
+.dark textarea,
+.dark select,
+.dark button {
+  color: inherit;
+}
+
+/* Keep status colors consistent */
+.dark .bg-blue-100 {
+  background-color: rgb(59 130 246 / 0.1);
+}
+
+.dark .text-blue-700 {
+  color: rgb(59 130 246);
+}
+
+.dark .bg-red-100 {
+  background-color: rgb(239 68 68 / 0.1);
+}
+
+.dark .text-red-600 {
+  color: rgb(239 68 68);
+}
+
+/* Keep hover states consistent */
+.dark .hover\:bg-gray-100:hover {
+  background-color: rgb(255 255 255 / 0.1);
+}
+
+.dark .hover\:bg-blue-600:hover {
+  background-color: rgb(37 99 235);
+}
+
+.dark .hover\:bg-red-600:hover {
+  background-color: rgb(220 38 38);
+}
+
+.dark .hover\:text-white:hover {
+  color: white;
+}
+
+/* Keep border colors consistent */
+.dark .border-gray-100,
+.dark .border-gray-200 {
+  border-color: rgb(255 255 255 / 0.1);
+}
+
+/* Common border styles for light mode */
+.border {
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.rounded-lg,
+.rounded-md {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* Card and input container styles */
+.card,
+.bg-white,
+.bg-gray-50 {
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* Dark mode border styles */
+.dark .border {
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .rounded-lg,
+.dark .rounded-md {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.dark .card,
+.dark .bg-white,
+.dark .bg-gray-50 {
+  background-color: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+}
+
+/* Task cards in dark mode */
+.dark .flex-col.gap-2.p-6.bg-white {
+  background-color: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Comment containers in dark mode */
+.dark .bg-gray-50.p-4.rounded-md,
+.dark .bg-gray-50.p-3.rounded-md {
+  background-color: rgba(30, 41, 59, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Individual comments in dark mode */
+.dark .bg-white.p-2.rounded.border {
+  background-color: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+/* Inputs and textareas in dark mode */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: rgba(15, 23, 42, 0.6); /* slate-900 with opacity */
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Override any specific border colors */
+.border-gray-100,
+.border-gray-200,
+.border-input {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-input {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Alert Dialog styles */
+.AlertDialogContent {
+  background-color: white !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Dark mode Alert Dialog */
+.dark .AlertDialogContent {
+  background-color: rgba(30, 41, 59, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.03) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* Status dropdown styles */
+.dark .SelectContent {
+  background-color: rgb(30, 41, 59) !important; /* solid slate-800 color */
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Status dropdown item styles */
+.dark .SelectItem {
+  color: rgb(226, 232, 240) !important; /* text-gray-200 */
+}
+
+/* Status dropdown hover styles */
+.dark .SelectItem:hover {
+  background-color: rgb(51, 65, 85) !important; /* slate-700 */
+}
+
+/* Status dropdown selected item */
+.dark .SelectItem[data-state="checked"] {
+  background-color: rgb(51, 65, 85) !important; /* slate-700 */
+}
+
+/* Add this to your existing styles */
+@keyframes highlight {
+  0% {
+    background-color: rgba(59, 130, 246, 0.1);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.highlight-project {
+  animation: highlight 2s ease-out;
+}
+
+/* Make text slightly smaller throughout the app */
+html {
+  font-size: 15px;
+}
+
+/* Make spacing more compact */
+.p-4 {
+  padding: 0.9rem;
+}
+
+.p-3 {
+  padding: 0.7rem;
+}
+
+.py-4 {
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+}
+
+.py-3 {
+  padding-top: 0.7rem;
+  padding-bottom: 0.7rem;
+}
+
+.px-4 {
+  padding-left: 0.9rem;
+  padding-right: 0.9rem;
+}
+
+.px-3 {
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+}
+
+.gap-4 {
+  gap: 0.9rem;
+}
+
+.gap-3 {
+  gap: 0.7rem;
+}
+
+.text-xl {
+  font-size: 1.15rem;
+  line-height: 1.5rem;
+}
+
+.text-lg {
+  font-size: 1.05rem;
+  line-height: 1.4rem;
+}
+
+.text-base {
+  font-size: 0.95rem;
+  line-height: 1.3rem;
+}
+
+.text-sm {
+  font-size: 0.85rem;
+  line-height: 1.2rem;
+}
+
+.text-xs {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* Make dialog boxes use off-white background */
+.bg-white, 
+.bg-background,
+[data-dialog-content],
+[data-dropdown-menu-content] {
+  background-color: hsl(var(--background)) !important;
+}
+
+/* Ensure all cards use off-white */
+.card, 
+[data-card] {
+  background-color: hsl(var(--card)) !important;
+}
+
+/* Ensure inputs use off-white */
+input, 
+textarea, 
+select {
+  background-color: hsl(var(--background)) !important;
+}
+
+/* Sidebar specific styles */
+.sidebar {
+  background-color: #2d3748; /* Warm dark gray */
+  color: #f7fafc;
+}
+
+/* Project management app styles */
+.project-card {
+  padding: 0.7rem;
+  font-size: 0.9rem;
+}
+
+.task-card {
+  padding: 0.6rem;
+  font-size: 0.85rem;
+}
+
+/* Make buttons more compact */
+.btn, button {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.btn-sm, button[size="sm"] {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* Add these specific styles to fix the chevron visibility */
+.text-gray-500.dark\:text-gray-300 {
+  color: #6b7280 !important;
+}
+
+.dark .text-gray-500.dark\:text-gray-300 {
+  color: #d1d5db !important;
+}
+
+/* Fix task card spacing */
+.task-card {
+  margin-bottom: 0.5rem !important;
+  padding: 0.6rem !important;
+}
+
+.task-card > div {
+  margin-bottom: 0.5rem !important;
+}
+
+.task-card:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Fix button spacing */
+button.p-1, button.p-1\.5 {
+  padding: 0.25rem !important;
+}
+
+/* Fix user profile at bottom of sidebar */
+.sidebar-container {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 16rem; /* 64px */
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s ease;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 70px; /* Make room for the footer */
+}
+
+.sidebar-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: #2d3748; /* Match sidebar background */
+  border-top: 1px solid #4a5568;
+  z-index: 10;
+}
+
+/* Fix chevron visibility */
+.text-gray-600.dark\:text-gray-300,
+.text-gray-500.dark\:text-gray-300 {
+  color: #4b5563 !important; /* darker gray for better visibility */
+}
+
+.dark .text-gray-600.dark\:text-gray-300,
+.dark .text-gray-500.dark\:text-gray-300 {
+  color: #d1d5db !important; /* lighter gray for dark mode */
+}
+
+/* Adjust main content to make room for sidebar */
+.layout-wrapper {
+  margin-left: 16rem;
+  padding: 0;
+  width: calc(100% - 16rem);
+  transition: margin-left 0.3s ease, width 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* When sidebar is collapsed */
+.layout-wrapper.ml-16 {
+  margin-left: 4rem;
+  width: calc(100% - 4rem);
+}
+
+/* Remove container padding */
+.container {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  max-width: none !important;
+  width: 100%;
+}
+
+/* Make search icons smaller and cleaner */
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6b7280;
+  width: 18px;
+  height: 18px;
+}
+
+/* Fix search container styling */
+.search-container {
+  position: relative;
+  width: 100%;
+  max-width: 300px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 8px 8px 36px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.dark .search-input {
+  background-color: #1f2937;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+
+/* Fix Add Project button styling */
+.button-primary {
+  background-color: #3b82f6 !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 0.5rem !important;
+  height: 2.5rem !important;
+  padding: 0 1rem !important;
+  font-weight: 500 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  transition: background-color 0.2s !important;
+}
+
+.button-primary:hover {
+  background-color: #2563eb !important;
+}
+
+.button-primary svg {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+}
+
+/* Fix back button styling */
+.back-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  border-radius: 0.375rem !important; /* Square with rounded corners */
+  background-color: transparent !important;
+  transition: background-color 0.2s, border-color 0.2s !important;
+}
+
+.back-button:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+  border: 1px solid #e5e7eb !important;
+}
+
+.dark .back-button:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid #374151 !important;
+}
+
+.back-button svg {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Fix sidebar project items */
+.sidebar-item {
+  display: flex !important;
+  align-items: center !important;
+  padding: 0.5rem 0.75rem !important;
+  border-radius: 0.25rem !important;
+  margin-bottom: 0.25rem !important;
+  transition: background-color 0.2s !important;
+}
+
+.sidebar-item .project-dot {
+  min-width: 0.5rem !important;
+  height: 0.5rem !important;
+  border-radius: 50% !important;
+  margin-right: 0.5rem !important;
+}
+
+.sidebar-item span {
+  flex: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.sidebar-item svg {
+  min-width: 1rem !important;
+  height: 1rem !important;
+}
+
+/* Fix workspace cards */
+.workspace-item {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 1rem !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 0.5rem !important;
+  margin-bottom: 0.5rem !important;
+  background-color: white !important;
+  transition: background-color 0.2s, border-color 0.2s !important;
+}
+
+.dark .workspace-item {
+  border-color: #374151 !important;
+  background-color: #1f2937 !important;
+}
+
+.workspace-item:hover {
+  border-color: #d1d5db !important;
+  background-color: #f9fafb !important;
+}
+
+.dark .workspace-item:hover {
+  border-color: #4b5563 !important;
+  background-color: #283548 !important;
+}
+
+/* Fix dropdown menu styling */
+.dropdown-menu {
+  border: 1px solid var(--border-light) !important;
+  border-radius: 0.375rem !important;
+  background-color: var(--background-light) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+.dark .dropdown-menu {
+  border-color: var(--border-dark) !important;
+  background-color: #1f2937 !important;
+}
+
+.dropdown-item {
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s !important;
+}
+
+.dropdown-item:hover {
+  background-color: #f3f4f6 !important;
+}
+
+.dark .dropdown-item:hover {
+  background-color: #283548 !important;
+}
+
+/* App header styles */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  background-color: white;
+  height: 64px;
+}
+
+.dark .app-header {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Layout wrapper styles */
+.layout-wrapper {
+  margin-left: 16rem; /* 64px (256px sidebar width) */
+  width: calc(100% - 16rem);
+  transition: margin-left 0.3s ease, width 0.3s ease;
+}
+
+@media (max-width: 768px) {
+  .layout-wrapper {
+    margin-left: 0;
+    width: 100%;
+  }
 }

@@ -1,0 +1,2006 @@
+'use client'
+
+import React, { useState, useEffect, useRef } from 'react';
+import { PlusCircle, ChevronDown, ChevronRight, ChevronLeft, Trash2, GripVertical, Pencil as PencilIcon, Search, Briefcase, Users, User, MessageCircle, Home, Folder } from 'lucide-react';
+import { Card, CardContent } from './ui/card';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "./ui/dialog";
+import { cn, getUserColor } from '../lib/utils';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
+import UserMenu from './UserMenu';
+import { ThemeToggle } from './ThemeToggle';
+import LayoutWrapper from './LayoutWrapper';
+import { useSession } from 'next-auth/react';
+import { db } from '../lib/database';
+import { ProjectForm } from './ProjectForm';
+import Sidebar from './Sidebar';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator
+} from "./ui/dropdown-menu";
+import { Checkbox } from "./ui/checkbox";
+import { useRouter } from 'next/navigation';
+
+// SortableProject component
+const SortableProject = ({ children, project }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: project.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      {children({ dragHandleProps: listeners })}
+    </div>
+  );
+};
+
+// SortableTask component
+const SortableTask = ({ children, task }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      {children({ dragHandleProps: listeners })}
+    </div>
+  );
+};
+
+// Fix the CommentPopover component to position strictly on the left
+const CommentPopover = ({ children, trigger }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const popoverRef = useRef(null);
+  const triggerRef = useRef(null);
+  
+  // Close popover when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target) &&
+          triggerRef.current && !triggerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+  
+  return (
+    <div className="relative">
+      <div ref={triggerRef} onClick={() => setIsOpen(!isOpen)}>
+        {trigger}
+      </div>
+      
+      {isOpen && (
+        <div 
+          ref={popoverRef}
+          className="fixed z-50 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700"
+          style={{
+            width: '400px', // Increased by 25% from 320px
+            top: triggerRef.current ? triggerRef.current.getBoundingClientRect().bottom + window.scrollY + 5 + 'px' : '0px',
+            left: triggerRef.current ? triggerRef.current.getBoundingClientRect().left - 300 + 'px' : '0px', // Adjusted for wider popover
+            maxHeight: '60vh',
+            overflowY: 'auto'
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ProjectManagementApp = ({ 
+  workspace, 
+  onLogout, 
+  onBackToWorkspaces,
+  createProject,
+  projectDialogOpen,
+  setProjectDialogOpen,
+  newProjectName,
+  setNewProjectName,
+  onNavigateToDashboard
+}) => {
+  const { data: session } = useSession();
+  const [projects, setProjects] = useState([]);
+  const [expandedProjects, setExpandedProjects] = useState({});
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [workspaceUsers, setWorkspaceUsers] = useState([]);
+  const [sidebarProjects, setSidebarProjects] = useState([]);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [currentProjectId, setCurrentProjectId] = useState(null);
+  const [newTaskInputs, setNewTaskInputs] = useState({});
+  const [allUsers, setAllUsers] = useState([]);
+  const [openStatusDropdowns, setOpenStatusDropdowns] = useState({});
+  const [openOwnerDropdowns, setOpenOwnerDropdowns] = useState({});
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [taskComments, setTaskComments] = useState({});
+  const [editingComment, setEditingComment] = useState(null);
+  const [commentToDelete, setCommentToDelete] = useState(null);
+  const [showProjectForm, setShowProjectForm] = useState(false);
+  const [newProject, setNewProject] = useState({ 
+    name: '', 
+    workspace_id: workspace?.id || '' 
+  });
+  const [localProjectDialogOpen, setLocalProjectDialogOpen] = useState(false);
+  const [localNewProjectName, setLocalNewProjectName] = useState('');
+  const [newComment, setNewComment] = useState('');
+  const router = useRouter();
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'kanban'
+
+  const effectiveProjectDialogOpen = projectDialogOpen !== undefined ? projectDialogOpen : localProjectDialogOpen;
+  const effectiveSetProjectDialogOpen = setProjectDialogOpen || setLocalProjectDialogOpen;
+  const effectiveNewProjectName = newProjectName !== undefined ? newProjectName : localNewProjectName;
+  const effectiveSetNewProjectName = setNewProjectName || setLocalNewProjectName;
+
+  useEffect(() => {
+    if (session?.user) {
+      setWorkspaceUsers([
+        {
+          id: session.user.id,
+          name: session.user.name,
+          email: session.user.email,
+          image: session.user.image
+        }
+      ]);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    // Load users only once when the component mounts or when workspace changes
+    loadUsers();
+    
+    // Load projects only when workspace changes
+    if (workspace?.id) {
+      console.log('Loading projects for workspace from useEffect:', workspace.id);
+      loadProjects();
+    }
+    
+    // This dependency array ensures these effects only run when the workspace changes
+    // Do NOT add allUsers or any other state variables here that would cause loops
+  }, [workspace?.id]);
+
+  useEffect(() => {
+    if (session?.user) {
+      // Initialize allUsers with the current user
+      setAllUsers([{
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image
+      }]);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (workspace?.id) {
+      setNewProject(prev => ({ ...prev, workspace_id: workspace.id }));
+    }
+  }, [workspace]);
+
+  useEffect(() => {
+    // Load projects when projectDialogOpen changes from true to false
+    // This will reload projects after a new project is created
+    if (effectiveProjectDialogOpen === false) {
+      loadProjects();
+    }
+  }, [effectiveProjectDialogOpen]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const loadProjects = async () => {
+    try {
+      if (!workspace || !workspace.id) {
+        console.warn('Cannot load projects: workspace or workspace.id is missing');
+        return;
+      }
+      
+      // Set loading state to show a loading indicator
+      setProjects([]);
+      console.log("Loading projects for workspace:", workspace.id);
+      
+      // Use getProjectsWithTasks instead of getProjectsByWorkspace
+      const projectData = await db.getProjectsWithTasks(workspace.id);
+      console.log("Projects loaded:", projectData);
+      
+      if (!projectData || projectData.length === 0) {
+        console.log("No projects found for workspace", workspace.id);
+        // Set an empty array but don't show an error
+        setProjects([]);
+        setSidebarProjects([]);
+        return;
+      }
+      
+      // Process the assigned_to field for each task
+      const processedProjects = projectData.map(project => {
+        if (project.tasks) {
+          return {
+            ...project,
+            tasks: project.tasks.map(task => {
+              let processedAssignedTo = [];
+              
+              if (task.assigned_to) {
+                // Handle string format (JSON)
+                if (typeof task.assigned_to === 'string') {
+                  try {
+                    const parsed = JSON.parse(task.assigned_to);
+                    if (Array.isArray(parsed)) {
+                      // Convert user IDs to user objects
+                      processedAssignedTo = parsed.map(userId => {
+                        const user = allUsers.find(u => String(u.id) === String(userId));
+                        return user || { id: userId, name: `User ${userId.substring(0, 4)}` };
+                      });
+                    }
+                  } catch (e) {
+                    console.error("Error parsing assigned_to:", e);
+                  }
+                } else if (Array.isArray(task.assigned_to)) {
+                  // If it's already an array, ensure each item is a user object
+                  processedAssignedTo = task.assigned_to.map(item => {
+                    if (typeof item === 'object' && item !== null) {
+                      return item; // Already a user object
+                    } else {
+                      const user = allUsers.find(u => String(u.id) === String(item));
+                      return user || { id: item, name: `User ${String(item).substring(0, 4)}` };
+                    }
+                  });
+                }
+              }
+              
+              return {
+                ...task,
+                assigned_to: processedAssignedTo
+              };
+            })
+          };
+        }
+        return project;
+      });
+      
+      setProjects(processedProjects);
+      
+      // Also update sidebarProjects with a simplified version for the sidebar
+      const simplifiedProjects = processedProjects.map(project => ({
+        id: project.id,
+        name: project.name,
+        workspace_id: project.workspace_id
+      }));
+      setSidebarProjects(simplifiedProjects);
+      
+    } catch (error) {
+      console.error("Error loading projects:", error);
+      // Using a more specific error handler
+      handleSupabaseError(error, 'loading projects');
+      // Set empty projects but don't crash
+      setProjects([]);
+      setSidebarProjects([]);
+    }
+  };
+
+  const handleProjectCreated = async (project) => {
+    await loadProjects();
+    setDialogOpen(false);
+  };
+
+  const handleDelete = async () => {
+    try {
+      if (!itemToDelete) return;
+      
+      if (itemToDelete.type === 'project') {
+        await db.deleteProject(itemToDelete.projectId);
+        // Update local state
+        setProjects(projects.filter(p => p.id !== itemToDelete.projectId));
+      } else if (itemToDelete.type === 'task') {
+        console.log('Deleting task:', itemToDelete);
+        
+        // First, attempt the deletion
+        const { success, error } = await db.deleteTask(itemToDelete.taskId);
+        
+        if (success) {
+          // Update local state - remove the task from the project
+          const updatedProjects = projects.map(project => {
+            if (project.id === itemToDelete.projectId) {
+        return {
+          ...project,
+                tasks: project.tasks.filter(task => task.id !== itemToDelete.taskId)
+        };
+      }
+      return project;
+          });
+          
+          setProjects(updatedProjects);
+          console.log('Task deleted successfully and state updated');
+        } else {
+          console.error('Failed to delete task:', error);
+          // Show error message to user
+          alert('Failed to delete task. Please try again.');
+        }
+      }
+      
+      // Close the dialog
+      setItemToDelete(null);
+      setDialogOpen(false);
+    } catch (error) {
+      console.error('Error in handleDelete:', error);
+      alert('An error occurred. Please try again.');
+    }
+  };
+
+  // Filter projects based on search query
+  const filteredProjects = projects.filter(project =>
+    project.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Toggle project expansion
+  const toggleProject = (projectId) => {
+    setExpandedProjects({
+      ...expandedProjects,
+      [projectId]: !expandedProjects[projectId]
+    });
+  };
+
+  // Handle drag end for project reordering
+  const handleDragEnd = (event) => {
+    const { active, over } = event;
+    
+    if (active.id !== over.id) {
+      setProjects((items) => {
+        const oldIndex = items.findIndex(item => item.id === active.id);
+        const newIndex = items.findIndex(item => item.id === over.id);
+        
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  };
+
+  // Update the handleDeleteTask function to handle task deletion
+  const handleDeleteTask = async (projectId, taskId) => {
+    try {
+      const { success, error } = await db.deleteTask(taskId);
+      
+      if (success) {
+        // Update local state directly instead of reloading all projects
+        setProjects(currentProjects => 
+          currentProjects.map(project => {
+            if (project.id === projectId) {
+              return {
+                ...project,
+                tasks: project.tasks.filter(task => task.id !== taskId)
+              };
+            }
+            return project;
+          })
+        );
+      } else {
+        console.error('Failed to delete task:', error);
+        alert('Failed to delete task. Please try again.');
+      }
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      alert('An error occurred. Please try again.');
+    }
+  };
+
+  // Update project name
+  const updateProjectName = async (projectId, newName) => {
+    try {
+      if (!newName.trim()) return;
+      
+      await db.updateProject(projectId, { name: newName.trim() });
+      await loadProjects();
+    } catch (error) {
+      console.error('Failed to update project name:', error);
+      alert(error.message || 'Failed to update project name');
+    }
+  };
+
+  // Fix the updateTaskOrder function
+  const updateTaskOrder = async (projectId) => {
+    try {
+      const project = projects.find(p => p.id === projectId);
+      if (!project) return;
+      
+      const taskIds = project.tasks.map(task => task.id);
+      
+      // Since db.updateTaskOrder doesn't exist, we'll use a different approach
+      // Update each task with its new position
+      for (let i = 0; i < taskIds.length; i++) {
+        await db.updateTask(taskIds[i], { position: i });
+      }
+      
+      console.log('Task order updated successfully');
+    } catch (error) {
+      console.error('Failed to update task order:', error);
+    }
+  };
+
+  // Fix the Add Task button functionality to include user ID
+  const handleAddTask = async (projectId) => {
+    try {
+      // Get the current user ID
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        console.error('User ID is required');
+        return;
+      }
+      
+      const newTask = {
+        title: 'New Task',
+        description: '',
+        status: 'not_started',
+        position: projects.find(p => p.id === projectId)?.tasks.length || 0,
+        userId: userId, // Add the user ID
+        // Don't include assigned_to if it's empty/undefined
+      };
+      
+      const taskId = await db.createTask(projectId, newTask);
+      
+      // Update local state
+      const updatedProjects = projects.map(project => {
+      if (project.id === projectId) {
+        return {
+          ...project,
+            tasks: [...project.tasks, newTask]
+        };
+      }
+      return project;
+      });
+      
+      setProjects(updatedProjects);
+    } catch (error) {
+      console.error('Failed to add task:', error);
+    }
+  };
+
+  // Add a function to create tasks
+  const handleTaskCreated = async (taskData) => {
+    try {
+      if (!currentProjectId) return;
+      
+      await db.createTask(currentProjectId, {
+        ...taskData,
+        userId: session.user.id,
+        created_by: session.user.id,
+        assigned_to: [session.user.id]
+      });
+      
+      await loadProjects();
+      setTaskDialogOpen(false);
+    } catch (error) {
+      console.error('Failed to create task:', error);
+      alert('Error: ' + (error.message || 'Failed to create task'));
+    }
+  };
+
+  // Add function to handle new task input change
+  const handleNewTaskInputChange = (projectId, value) => {
+    setNewTaskInputs({
+      ...newTaskInputs,
+      [projectId]: value
+    });
+  };
+
+  // Add function to create a task inline
+  const createTaskInline = async (projectId) => {
+    const taskTitle = newTaskInputs[projectId]?.trim();
+    if (!taskTitle) return;
+    
+    try {
+      await db.createTask(projectId, {
+        title: taskTitle,
+        description: '',
+        status: 'not_started',
+        priority: 'medium',
+        due_date: null,
+        userId: session.user.id,
+        created_by: session.user.id,
+        assigned_to: [session.user.id]
+      });
+      
+      // Clear the input
+      setNewTaskInputs({
+        ...newTaskInputs,
+        [projectId]: ''
+      });
+      
+      await loadProjects();
+    } catch (error) {
+      console.error('Failed to create task:', error);
+    }
+  };
+
+  // Fix the task title update functionality
+  const updateTaskTitle = async (taskId, newTitle) => {
+    try {
+      if (!newTitle.trim()) return;
+      
+      // Find the task to get its current data
+      let taskData = null;
+      let projectId = null;
+      
+      for (const project of projects) {
+        const task = project.tasks.find(t => t.id === taskId);
+        if (task) {
+          taskData = task;
+          projectId = project.id;
+          break;
+        }
+      }
+      
+      if (!taskData) {
+        console.error('Task not found');
+        return;
+      }
+      
+      // Update in database
+      await db.updateTask(taskId, { 
+        title: newTitle,
+        userId: session?.user?.id // Ensure user ID is included
+      });
+      
+      // Update locally
+      const updatedProjects = projects.map(project => {
+      if (project.id === projectId) {
+        return {
+          ...project,
+            tasks: project.tasks.map(t => t.id === taskId ? { ...t, title: newTitle } : t)
+        };
+      }
+      return project;
+      });
+      
+      setProjects(updatedProjects);
+    } catch (error) {
+      console.error('Failed to update task title:', error);
+    }
+  };
+
+  // Add these helper functions
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed':
+        return 'bg-green-500';
+      case 'in_progress':
+        return 'bg-blue-500';
+      case 'blocked':
+        return 'bg-red-500';
+      case 'in_review':
+        return 'bg-yellow-500';
+      case 'not_started':
+      default:
+        return 'bg-gray-400';
+    }
+  };
+
+  const updateTaskStatus = async (taskId, status) => {
+    try {
+      // Update locally for immediate feedback
+      const updatedProjects = projects.map(p => {
+        return {
+          ...p,
+          tasks: p.tasks.map(t => {
+            if (t.id === taskId) {
+              return { ...t, status };
+            }
+            return t;
+          })
+        };
+      });
+      setProjects(updatedProjects);
+      
+      // Update in database
+      await db.updateTask(taskId, { status });
+    } catch (error) {
+      console.error('Failed to update task status:', error);
+    }
+  };
+
+  const assignTaskToCurrentUser = async (taskId) => {
+    if (!session?.user) return;
+    
+    try {
+      // Update locally for immediate feedback
+      const updatedProjects = projects.map(p => {
+        return {
+          ...p,
+          tasks: p.tasks.map(t => {
+            if (t.id === taskId) {
+              return { 
+                ...t, 
+                assigned_to: [{ 
+                  id: session.user.id,
+                  name: session.user.name,
+                  email: session.user.email,
+                  image: session.user.image
+                }] 
+              };
+            }
+            return t;
+          })
+        };
+      });
+      setProjects(updatedProjects);
+      
+      // Update in database
+      await db.updateTask(taskId, { 
+        assigned_to: [session.user.id]
+      });
+    } catch (error) {
+      console.error('Failed to assign task:', error);
+    }
+  };
+
+  // Fix the loadUsers function to avoid errors
+  const loadUsers = async () => {
+    try {
+      // Use session user as fallback since getUsers doesn't exist
+      if (session?.user) {
+        const currentUser = {
+          id: session.user.id,
+          name: session.user.name || session.user.email?.split('@')[0] || 'User',
+          email: session.user.email,
+          image: session.user.image
+        };
+        
+        setAllUsers([currentUser]);
+      }
+      
+      // Try to get workspace members if that function exists
+      if (workspace?.id) {
+        try {
+          // If getWorkspaceMembers doesn't exist, this will be caught in the catch block
+          if (typeof db.getWorkspaceMembers === 'function') {
+            const workspaceUsers = await db.getWorkspaceMembers(workspace.id);
+            if (Array.isArray(workspaceUsers) && workspaceUsers.length > 0) {
+              setAllUsers(workspaceUsers);
+            }
+          }
+        } catch (userError) {
+          // Just log the error, don't disrupt the flow
+          console.error('Could not load workspace members:', userError);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load users:', error);
+    }
+  };
+
+  // Fix the renderTaskOwners function to properly show "Unassigned" text and prevent duplicate avatars
+  const renderTaskOwners = (task) => {
+    // Check if task.assigned_to exists, is an array, and has items
+    if (!task.assigned_to || !Array.isArray(task.assigned_to) || task.assigned_to.length === 0) {
+      return <span className="text-sm text-gray-500">Unassigned</span>;
+    }
+    
+    // Remove any duplicate users by ID
+    const uniqueOwners = [];
+    const seenIds = new Set();
+    
+    for (const owner of task.assigned_to) {
+      if (owner && owner.id && !seenIds.has(owner.id)) {
+        seenIds.add(owner.id);
+        uniqueOwners.push(owner);
+      }
+    }
+    
+    // If after removing duplicates we have no owners, show unassigned
+    if (uniqueOwners.length === 0) {
+      return <span className="text-sm text-gray-500">Unassigned</span>;
+    }
+    
+    // Show up to 3 unique owners
+    const displayedOwners = uniqueOwners.slice(0, 3);
+
+  return (
+      <div className="flex -space-x-2">
+        {displayedOwners.map((owner, index) => (
+          <div 
+            key={owner.id || index} 
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium border-2 border-white dark:border-gray-800 ${getUserColor(owner.id)}`}
+            style={{ zIndex: 10 - index }}
+          >
+            {getUserInitials(owner.name)}
+          </div>
+        ))}
+        {uniqueOwners.length > 3 && (
+          <div className="w-6 h-6 rounded-full bg-gray-600 text-white flex items-center justify-center text-[10px] font-medium border-2 border-white dark:border-gray-800" style={{ zIndex: 7 }}>
+            +{uniqueOwners.length - 3}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Update the task owner dropdown to use the app's UI design
+  const assignTaskToUser = async (taskId, user) => {
+    try {
+      // Update locally for immediate feedback
+      const updatedProjects = projects.map(p => {
+        return {
+          ...p,
+          tasks: p.tasks.map(t => {
+            if (t.id === taskId) {
+              return { 
+                ...t, 
+                assigned_to: [user]
+              };
+            }
+            return t;
+          })
+        };
+      });
+      setProjects(updatedProjects);
+      
+      // Update in database
+      await db.updateTask(taskId, { 
+        assigned_to: [user.id]
+      });
+    } catch (error) {
+      console.error('Failed to assign task:', error);
+    }
+  };
+
+  const unassignTask = async (taskId) => {
+    try {
+      // Update locally for immediate feedback
+      const updatedProjects = projects.map(p => {
+        return {
+          ...p,
+          tasks: p.tasks.map(t => {
+            if (t.id === taskId) {
+              return { 
+                ...t, 
+                assigned_to: []
+              };
+            }
+            return t;
+          })
+        };
+      });
+      setProjects(updatedProjects);
+      
+      // Update in database
+      await db.updateTask(taskId, { 
+        assigned_to: []
+      });
+    } catch (error) {
+      console.error('Failed to unassign task:', error);
+    }
+  };
+
+  const updateTaskDueDate = async (taskId, dueDate) => {
+    try {
+      // Update locally for immediate feedback
+      const updatedProjects = projects.map(p => {
+        return {
+          ...p,
+          tasks: p.tasks.map(t => {
+            if (t.id === taskId) {
+              return { ...t, due_date: dueDate };
+            }
+            return t;
+          })
+        };
+      });
+      setProjects(updatedProjects);
+      
+      // Update in database
+      await db.updateTask(taskId, { due_date: dueDate });
+    } catch (error) {
+      console.error('Failed to update due date:', error);
+    }
+  };
+
+  const updateTaskHours = async (taskId, field, hours) => {
+    try {
+      // Update locally for immediate feedback
+      const updatedProjects = projects.map(p => {
+        return {
+          ...p,
+          tasks: p.tasks.map(t => {
+            if (t.id === taskId) {
+              return { ...t, [field]: hours };
+            }
+            return t;
+          })
+        };
+      });
+      setProjects(updatedProjects);
+      
+      // Update in database
+      await db.updateTask(taskId, { [field]: hours });
+    } catch (error) {
+      console.error(`Failed to update ${field}:`, error);
+    }
+  };
+
+  // Fix the getUserInitials function to properly display initials
+  const getUserInitials = (name) => {
+    if (!name) return 'U';
+    
+    // Split the name and get the first letter of each part
+    const parts = name.split(' ');
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    
+    // Get first letter of first and last name
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  };
+
+  // Update the toggleUserAssignment function to save task owners
+  const toggleUserAssignment = async (taskId, userId, isCurrentlyAssigned) => {
+    try {
+      // Find the task
+      let taskData = null;
+      let projectId = null;
+      
+      for (const project of projects) {
+        const task = project.tasks.find(t => t.id === taskId);
+        if (task) {
+          taskData = task;
+          projectId = project.id;
+          break;
+        }
+      }
+      
+      if (!taskData) {
+        console.error('Task not found');
+        return;
+      }
+      
+      // Ensure assigned_to is an array
+      let newAssigned = Array.isArray(taskData.assigned_to) ? [...taskData.assigned_to] : [];
+      
+      // Filter out any undefined or null values
+      newAssigned = newAssigned.filter(u => u && u.id);
+      
+      if (isCurrentlyAssigned) {
+        // Remove user
+        newAssigned = newAssigned.filter(u => String(u.id) !== String(userId));
+      } else {
+        // Add user (limit to 3 max)
+        const userToAdd = allUsers.find(u => String(u.id) === String(userId));
+        
+        if (userToAdd && !newAssigned.some(u => String(u.id) === String(userId))) {
+          if (newAssigned.length >= 3) {
+            // Remove the oldest assignment to make room
+            newAssigned.shift();
+          }
+          newAssigned.push(userToAdd);
+        }
+      }
+      
+      // Update local state
+      const updatedProjects = projects.map(p => {
+        if (p.id === projectId) {
+          return {
+            ...p,
+            tasks: p.tasks.map(t => {
+              if (t.id === taskId) {
+                return { ...t, assigned_to: newAssigned };
+              }
+              return t;
+            })
+          };
+        }
+        return p;
+      });
+      setProjects(updatedProjects);
+      
+      // Update in database - store just the user IDs, filtering out any undefined
+      const assignedIds = newAssigned
+        .filter(u => u && u.id) // Filter out undefined/null
+        .map(u => String(u.id));
+        
+      await db.updateTask(taskId, { 
+        assigned_to: assignedIds,
+        userId: session?.user?.id // Ensure user ID is included
+      });
+    } catch (error) {
+      console.error('Failed to update task assignment:', error);
+    }
+  };
+
+  const toggleStatusDropdown = (taskId) => {
+    setOpenStatusDropdowns(prev => ({
+      ...prev,
+      [taskId]: !prev[taskId]
+    }));
+  };
+
+  const toggleOwnerDropdown = (taskId) => {
+    setOpenOwnerDropdowns(prev => ({
+      ...prev,
+      [taskId]: !prev[taskId]
+    }));
+  };
+
+  // Filter users based on search query
+  const getFilteredUsers = (users, query) => {
+    if (!query) return users.slice(0, 4); // Show only first 4 users when no search
+    
+    return users.filter(user => 
+      (user.name && user.name.toLowerCase().includes(query.toLowerCase())) || 
+      (user.email && user.email.toLowerCase().includes(query.toLowerCase()))
+    );
+  };
+
+  // Add task reordering functionality
+  const handleTaskDragEnd = (event, projectId) => {
+    const { active, over } = event;
+    
+    if (active.id !== over.id) {
+      setProjects((projects) => {
+        return projects.map(project => {
+          if (project.id === projectId) {
+            const oldIndex = project.tasks.findIndex(task => task.id === active.id);
+            const newIndex = project.tasks.findIndex(task => task.id === over.id);
+            
+            return {
+              ...project,
+              tasks: arrayMove(project.tasks, oldIndex, newIndex)
+            };
+          }
+          return project;
+        });
+      });
+      
+      // Update task order in database
+      updateTaskOrder(projectId);
+    }
+  };
+
+  // Fix the task owner display component
+  const TaskOwnerDisplay = ({ task }) => {
+    if (!task.assigned_to || task.assigned_to.length === 0) {
+      return (
+        <div className="flex items-center">
+          <span className="text-gray-500 dark:text-gray-400">Unassigned</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center space-x-1">
+        {task.assigned_to.map((user, index) => (
+          <div 
+            key={index} 
+            className="flex items-center"
+            title={user.name || user.email || 'User'}
+          >
+            <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-medium">
+              {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Fix the CircularProgress component
+  const CircularProgress = ({ value, size = 16 }) => {
+    // Calculate percentage (handle division by zero)
+    const percentage = value.actual && value.estimated 
+      ? Math.min(100, Math.round((value.actual / value.estimated) * 100)) 
+      : 0;
+    
+    // Determine color based on percentage - simplified color scheme
+    let color = '#10B981'; // Green for normal progress
+    
+    // Turn red when approaching or exceeding 100%
+    if (percentage >= 90) {
+      color = '#EF4444'; // Red when close to or over budget
+    } else if (percentage >= 75) {
+      color = '#F59E0B'; // Amber when getting closer
+    }
+    
+    // Calculate circle properties
+    const radius = size / 2 - 2;
+    const circumference = 2 * Math.PI * radius;
+    const strokeDashoffset = circumference - (percentage / 100) * circumference;
+    
+    return (
+      <div className="flex items-center justify-center ml-1" style={{ width: size, height: size, minWidth: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="transform -rotate-90">
+          {/* Background circle */}
+          <circle
+            cx={size/2}
+            cy={size/2}
+            r={radius}
+            fill="none"
+            stroke="#E5E7EB"
+            strokeWidth="2"
+          />
+          {/* Progress circle */}
+          <circle
+            cx={size/2}
+            cy={size/2}
+            r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth="2"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+    );
+  };
+
+  // Update the addComment function to handle editing
+  const addComment = (taskId, comment, commentId = null) => {
+    if (!comment.trim()) return;
+    
+    setTaskComments(prev => {
+      const taskCommentList = prev[taskId] || [];
+      
+      // If editing an existing comment
+      if (commentId) {
+        return {
+          ...prev,
+          [taskId]: taskCommentList.map(c => 
+            c.id === commentId ? { ...c, text: comment, edited: true } : c
+          )
+        };
+      }
+      
+      // Adding a new comment
+      return {
+        ...prev,
+        [taskId]: [
+          {
+            id: Date.now(),
+            text: comment,
+            author: session?.user?.name || 'Anonymous',
+            timestamp: new Date().toISOString()
+          },
+          ...taskCommentList // Add new comment at the beginning
+        ]
+      };
+    });
+    
+    setEditingComment(null);
+  };
+
+  // Function to delete a comment
+  const deleteComment = (taskId, commentId) => {
+    setTaskComments(prev => {
+      const taskCommentList = prev[taskId] || [];
+      return {
+        ...prev,
+        [taskId]: taskCommentList.filter(c => c.id !== commentId)
+      };
+    });
+  };
+
+  // Function to handle comment deletion with confirmation
+  const handleDeleteComment = (taskId, commentId) => {
+    setCommentToDelete({ taskId, commentId });
+  };
+
+  // Function to confirm and execute comment deletion
+  const confirmDeleteComment = () => {
+    if (commentToDelete) {
+      deleteComment(commentToDelete.taskId, commentToDelete.commentId);
+      setCommentToDelete(null);
+    }
+  };
+
+  // Fix the createProjectFromDialog function to use the correct approach
+  const createProjectFromDialog = async (workspaceId) => {
+    try {
+      if (!effectiveNewProjectName.trim()) return;
+      
+      // Create project object first
+      const project = {
+        name: effectiveNewProjectName.trim(),
+        workspace_id: workspace.id, // Use workspace from component props
+        user_id: session?.user?.id
+      };
+      
+      console.log("Creating project with:", project);
+      
+      // Call createProject with the project object directly
+      const projectId = await db.createProject(project);
+      console.log("Project created with ID:", projectId);
+      
+      // Clear the form and close the dialog
+      effectiveSetNewProjectName('');
+      effectiveSetProjectDialogOpen(false);
+      
+      // Reload projects
+      await loadProjects();
+    } catch (error) {
+      console.error("Failed to create project:", error);
+      alert(`Failed to create project: ${error.message}`);
+    }
+  };
+
+  // 4. Fix Supabase error handling
+  // Add better error handling for Supabase operations
+  const handleSupabaseError = (error, operation) => {
+    console.error(`Supabase error during ${operation}:`, error);
+    
+    // Check if it's a connection error
+    if (error.message?.includes('network') || error.code === 'NETWORK_ERROR') {
+      alert('Network error. Please check your connection and try again.');
+      // Do not log the user out for network errors
+      return;
+    }
+    
+    // Check for authentication errors
+    if (error.status === 401 || error.code === 'PGRST301') {
+      alert('Your session has expired. Please log in again.');
+      onLogout(); // Log the user out if their session is invalid
+      return;
+    }
+    
+    // Generic error message
+    alert(`Error during ${operation}. Please try again later.`);
+  };
+
+  // Find the function that generates avatar colors based on user name
+  // This should be consistent across the application
+  const generateAvatarColor = (name) => {
+    // Common function to generate consistent colors for the same user
+    if (!name) return 'bg-gray-200';
+    
+    // Generate a hash code from the name
+    const hashCode = name.split('').reduce((hash, char) => {
+      return char.charCodeAt(0) + ((hash << 5) - hash);
+    }, 0);
+    
+    // Convert to a color - using a predefined set of colors for consistency
+    const colors = [
+      'bg-pink-500', 'bg-purple-500', 'bg-indigo-500', 'bg-blue-500', 
+      'bg-cyan-500', 'bg-teal-500', 'bg-green-500', 'bg-yellow-500', 
+      'bg-orange-500', 'bg-red-500'
+    ];
+    
+    return colors[Math.abs(hashCode) % colors.length];
+  };
+
+  // Fix the UserAvatar component to properly display user initials
+  const UserAvatar = ({ user, size = 'md' }) => {
+    if (!user) {
+      return (
+        <div className={`w-${size === 'sm' ? '6' : '8'} h-${size === 'sm' ? '6' : '8'} rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-${size === 'sm' ? 'xs' : 'sm'}`}>
+          <User className="w-3 h-3" />
+        </div>
+      );
+    }
+    
+    // Get user name or email
+    const displayName = user.name || user.email || '';
+    
+    // Generate initials directly
+    let initials = '?';
+    
+    if (displayName) {
+      const nameParts = displayName.split(' ').filter(part => part.length > 0);
+      if (nameParts.length === 1) {
+      initials = nameParts[0].charAt(0).toUpperCase();
+      } else if (nameParts.length > 1) {
+      initials = (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+      }
+    }
+    
+    // Directly use a vibrant color based on user ID
+    const colors = [
+      '#FF5733', // Bright Red
+      '#33FF57', // Bright Green
+      '#3357FF', // Bright Blue
+      '#FF33F5', // Bright Pink
+      '#F5FF33', // Bright Yellow
+      '#33FFF5', // Bright Cyan
+      '#FF8333', // Bright Orange
+      '#8333FF', // Bright Purple
+      '#33FF83', // Bright Mint
+      '#FF3383', // Bright Rose
+    ];
+    
+    // Generate a consistent index based on the userId
+    let hash = 0;
+    const userId = user.id || displayName || 'default';
+    for (let i = 0; i < userId.length; i++) {
+      hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    const colorIndex = Math.abs(hash) % colors.length;
+    const bgColor = colors[colorIndex];
+    
+    return (
+      <div 
+        className={`w-${size === 'sm' ? '6' : '8'} h-${size === 'sm' ? '6' : '8'} rounded-full flex items-center justify-center text-white text-${size === 'sm' ? 'xs' : 'sm'} font-medium`}
+        style={{ backgroundColor: bgColor }}
+        title={displayName}
+      >
+        {initials}
+      </div>
+    );
+  };
+
+  // Merge the two handleTaskClick functions into one
+  const handleTaskClick = async (task) => {
+    try {
+      console.log('Loading task details for:', task.id);
+      
+      // Get task details including comments from the database
+      const taskDetails = await db.getTaskDetails(task.id);
+      console.log('Task details loaded:', taskDetails);
+      
+      // Set the selected task with the details from the database
+      setSelectedTask(taskDetails);
+      setTaskDialogOpen(true);
+      
+      // Make sure assigned_to is properly processed
+      if (task.assigned_to) {
+        let assignedUsers = [];
+        
+        // Handle different formats of assigned_to
+        if (typeof task.assigned_to === 'string') {
+          try {
+            // If it's a JSON string, parse it
+            const parsed = JSON.parse(task.assigned_to);
+            if (Array.isArray(parsed)) {
+              // Map user IDs to user objects
+              assignedUsers = parsed.map(userId => {
+                return allUsers.find(u => String(u.id) === String(userId)) || null;
+              }).filter(Boolean);
+            }
+          } catch (e) {
+            console.error('Error parsing assigned_to:', e);
+          }
+        } else if (Array.isArray(task.assigned_to)) {
+          // If it's already an array, use it directly if it contains user objects
+          if (task.assigned_to.length > 0 && typeof task.assigned_to[0] === 'object') {
+            assignedUsers = task.assigned_to;
+          } else {
+            // Otherwise, map IDs to user objects
+            assignedUsers = task.assigned_to.map(userId => {
+              return allUsers.find(u => String(u.id) === String(userId)) || null;
+            }).filter(Boolean);
+          }
+        }
+        
+        // Update the task with processed assigned_to
+        setSelectedTask(prev => ({
+          ...prev,
+          assigned_to: assignedUsers
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to load task details:', error);
+    }
+  };
+
+  const handleAddComment = async (taskId, commentText) => {
+    if (!commentText.trim() || !session?.user?.id) return;
+    
+    try {
+      console.log('Adding comment:', { taskId, commentText, userId: session.user.id });
+      
+      // Save comment to database
+      const newComment = await db.addTaskComment(taskId, {
+        content: commentText.trim(),
+        user_id: session.user.id
+      });
+      
+      console.log('Comment added successfully:', newComment);
+      
+      // Update local state
+      setTaskComments(prev => {
+        const updatedComments = [...(prev[taskId] || []), newComment];
+        return { ...prev, [taskId]: updatedComments };
+      });
+      
+      // Clear comment input
+      setNewComment('');
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+      alert('Failed to add comment: ' + error.message);
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="app-header flex justify-between items-center p-4 border-b">
+        <div className="flex items-center">
+          <nav className="flex" aria-label="Breadcrumb">
+            <ol className="flex items-center space-x-2">
+              <li className="text-gray-500 text-sm">
+                <button 
+                  onClick={() => {
+                    if (typeof onNavigateToDashboard === 'function') {
+                      onNavigateToDashboard();
+                    } else {
+                      router.push('/');
+                    }
+                  }} 
+                  className="hover:text-blue-600 flex items-center"
+                >
+                  <Home className="h-4 w-4 mr-1" />
+                  <span>Dashboard</span>
+                </button>
+              </li>
+              <li className="text-gray-500 flex items-center text-sm">
+                <ChevronRight className="h-4 w-4 mx-1" />
+                <button onClick={onBackToWorkspaces} className="hover:text-blue-600 flex items-center">
+                  <Briefcase className="h-4 w-4 mr-1" />
+                  <span>Workspaces</span>
+                </button>
+              </li>
+              <li className="text-gray-500 flex items-center text-sm">
+                <ChevronRight className="h-4 w-4 mx-1" />
+                <Folder className="h-4 w-4 mr-1" />
+                <span className="text-blue-600">{workspace?.name || 'Workspace'}</span>
+              </li>
+            </ol>
+          </nav>
+        </div>
+        <div className="flex items-center space-x-2">
+                <ThemeToggle />
+          <UserMenu user={session?.user} onLogout={onLogout} />
+              </div>
+            </div>
+      
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full flex flex-col">
+          {/* Main content */}
+          <div className="flex-1 p-4 overflow-auto">
+            {/* Search and actions */}
+            <div className="flex justify-between items-center mb-6">
+            <div className="search-container">
+              <Search className="search-icon" />
+                <input
+          type="text"
+                  placeholder="Search projects and tasks..."
+                  className="search-input"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+              
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-gray-100 dark:bg-gray-800 p-1 rounded-md border border-gray-200 dark:border-gray-700">
+                  <button
+                    className={`px-3 py-1.5 text-sm rounded-md transition-all ${
+                      viewMode === 'list' 
+                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' 
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                    }`}
+                    onClick={() => setViewMode('list')}
+                  >
+                    <div className="flex items-center gap-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="8" y1="6" x2="21" y2="6"></line>
+                        <line x1="8" y1="12" x2="21" y2="12"></line>
+                        <line x1="8" y1="18" x2="21" y2="18"></line>
+                        <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                        <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                        <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                      </svg>
+                      <span>List</span>
+                    </div>
+                  </button>
+                  <button
+                    className={`px-3 py-1.5 text-sm rounded-md transition-all ${
+                      viewMode === 'kanban' 
+                        ? 'bg-white dark:bg-gray-700 text-blue-600 dark:text-blue-400 shadow-sm' 
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                    }`}
+                    onClick={() => setViewMode('kanban')}
+                  >
+                    <div className="flex items-center gap-1">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="3" width="7" height="7"></rect>
+                        <rect x="14" y="14" width="7" height="7"></rect>
+                        <rect x="3" y="14" width="7" height="7"></rect>
+                      </svg>
+                      <span>Kanban</span>
+                    </div>
+                  </button>
+                </div>
+                
+                <Button 
+                  onClick={() => effectiveSetProjectDialogOpen(true)}
+                  className="button-primary"
+                >
+                  <PlusCircle className="h-4 w-4 mr-2" />
+                  New Project
+                </Button>
+              </div>
+      </div>
+
+          {projects.length === 0 ? (
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+              <div className="text-center space-y-4">
+                <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-200">
+                  No Projects Created
+                </h2>
+                <p className="text-gray-600 dark:text-gray-400">
+                  Create a project to start managing your tasks
+                </p>
+              </div>
+            </div>
+            ) : viewMode === 'list' ? (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {/* Projects list */}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={projects.map(p => p.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+      <div className="space-y-4">
+                    {filteredProjects.map(project => (
+                      <SortableProject key={project.id} project={project}>
+                        {({ dragHandleProps }) => (
+                          <Card
+                            id={`project-${project.id}`}
+                            className="mb-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 project-card shadow-none"
+                          >
+                            <CardContent className="p-3">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                <button
+                  onClick={() => toggleProject(project.id)}
+                                    className="p-0 h-6 w-6 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+                                  >
+                                    {expandedProjects[project.id] ? (
+                                      <ChevronDown className="h-4 w-4" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4" />
+                                    )}
+                </button>
+                                    <div {...dragHandleProps} className="cursor-grab">
+                                      <GripVertical className="w-4 h-4 text-gray-400" />
+                                    </div>
+                                  <Input
+                                    value={project.name}
+                                    onChange={(e) => {
+                                      // Update locally for immediate feedback
+                                      const updatedProjects = projects.map(p => {
+                                        if (p.id === project.id) {
+                                          return { ...p, name: e.target.value };
+                                        }
+                                        return p;
+                                      });
+                                      setProjects(updatedProjects);
+                                    }}
+                                    onBlur={(e) => updateProjectName(project.id, e.target.value)}
+                                      className="h-7 px-2 py-1 text-sm font-medium border-none shadow-none focus-visible:ring-0 bg-transparent w-auto"
+                                  />
+                                </div>
+                                  <div className="flex items-center">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                                    onClick={() => setItemToDelete({ type: 'project', projectId: project.id })}
+                                      className="h-7 w-7 p-0 text-red-600"
+                  >
+                                      <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+                                
+              {expandedProjects[project.id] && (
+                                <div className="mt-3">
+                                    {/* Project tasks */}
+                                    <div className="bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                      {/* Task header */}
+                                      <div className="grid grid-cols-12 gap-4 bg-gray-50 dark:bg-gray-700 px-4 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600">
+                                    <div className="col-span-4">Task</div>
+                                    <div className="col-span-2">Status</div>
+                                    <div className="col-span-2">Owner</div>
+                                    <div className="col-span-1">Due Date</div>
+                                    <div className="col-span-1">Comments</div>
+                                    <div className="col-span-1">Hours</div>
+                                    <div className="col-span-1 text-right">Actions</div>
+                                  </div>
+                                  
+                                  {/* Tasks */}
+                                  <div className="bg-white dark:bg-gray-800">
+                                    {project.tasks && project.tasks.length > 0 ? (
+                                      <DndContext 
+                                        sensors={sensors}
+                                        collisionDetection={closestCenter}
+                                        onDragEnd={(event) => handleTaskDragEnd(event, project.id)}
+                                      >
+                                        <SortableContext 
+                                          items={project.tasks.map(task => task.id)}
+                                          strategy={verticalListSortingStrategy}
+                                        >
+                                          {project.tasks.map((task, index) => (
+                                            <SortableTask key={task.id} task={task}>
+                                              {({ dragHandleProps }) => (
+                                                <div 
+                                                  className="grid grid-cols-12 gap-4 items-center py-2 px-4 border-b border-gray-100 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+                                                >
+                                                  {/* Task name */}
+                                                  <div className="col-span-4 flex items-center gap-2">
+                                                    <div {...dragHandleProps} className="cursor-grab">
+                                                      <GripVertical className="w-4 h-4 text-gray-400" />
+                                                    </div>
+                                                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusColor(task.status)}`}></div>
+                                                    <Input
+                                                      value={task.title}
+                                                      onChange={(e) => {
+                                                        // Update locally for immediate feedback
+                                                        const updatedProjects = projects.map(p => {
+                                                          if (p.id === project.id) {
+                                                            return {
+                                                              ...p,
+                                                              tasks: p.tasks.map(t => {
+                                                                if (t.id === task.id) {
+                                                                  return { ...t, title: e.target.value };
+                                                                }
+                                                                return t;
+                                                              })
+                                                            };
+                                                          }
+                                                          return p;
+                                                        });
+                                                        setProjects(updatedProjects);
+                                                      }}
+                                                      onBlur={(e) => updateTaskTitle(task.id, e.target.value)}
+                                                      className="h-7 px-2 py-1 text-sm border-none shadow-none focus-visible:ring-0 bg-transparent w-auto"
+                                                    />
+                                                  </div>
+                                                  
+                                                  {/* Status */}
+                                                  <div className="col-span-2">
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger asChild>
+                                                        <Button
+                                                          variant="outline"
+                                                          size="sm"
+                                                          className="w-full h-8 flex justify-between items-center px-2 shadow-none border border-gray-200 dark:border-gray-700"
+                                                        >
+                                                          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusColor(task.status)}`}></div>
+                                                          <span className="mx-2 truncate">{task.status}</span>
+                                                          <ChevronDown className="h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent className="w-56">
+                                                        {['To Do', 'In Progress', 'In Review', 'Completed', 'Blocked'].map(status => (
+                                                          <DropdownMenuItem 
+                                                            key={status}
+                                                            onClick={() => updateTaskStatus(task.id, status)}
+                                                            className="cursor-pointer"
+                                                          >
+                                                            <div className="flex items-center">
+                                                              <div className={`w-2 h-2 rounded-full mr-2 ${getStatusColor(status)}`}></div>
+                                                              <span>{status}</span>
+                                                            </div>
+                                                          </DropdownMenuItem>
+                                                        ))}
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  </div>
+                                                  
+                                                  {/* Owner - back to original width */}
+                                                  <div className="col-span-2">
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger asChild>
+                                                        <Button
+                                                          variant="outline"
+                                                          size="sm"
+                                                          className="w-full h-8 flex justify-between items-center px-2 shadow-none border border-gray-200 dark:border-gray-700"
+                                                        >
+                                                          <div className="flex items-center gap-2">
+                                                            {task.assigned_to && task.assigned_to.length > 0 ? (
+                                                              <div className="flex items-center gap-1">
+                                                                {task.assigned_to.slice(0, 2).map(user => (
+                                                                  <UserAvatar key={user.id} user={user} size="sm" />
+                                                                ))}
+                                                                {task.assigned_to.length > 2 && (
+                                                                  <span className="text-xs">+{task.assigned_to.length - 2}</span>
+                                                                )}
+                                                              </div>
+                                                            ) : (
+                                                              <span className="text-gray-400">Unassigned</span>
+                                                            )}
+                                                          </div>
+                                                          <ChevronDown className="h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent className="w-56 p-0">
+                                                        <div className="px-3 py-2 text-xs font-medium text-gray-500 border-b border-gray-200 dark:border-gray-700">
+                                                          Assign up to 3 people
+                                                        </div>
+                                                        <div className="p-2 border-b border-gray-200 dark:border-gray-700">
+                                                          <Input
+                                                            placeholder="Search users..."
+                                                            value={userSearchQuery}
+                                                            onChange={(e) => setUserSearchQuery(e.target.value)}
+                                                            className="h-8 text-sm"
+                                                          />
+                                                        </div>
+                                                        <div className="max-h-48 overflow-y-auto">
+                                                          {getFilteredUsers(allUsers, userSearchQuery).map((user, index) => {
+                                                            const isAssigned = task.assigned_to?.some(u => u.id === user.id);
+                                                            return (
+                                                              <div
+                                                                key={user.id || `user-${index}`}
+                                                                className="flex items-center px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+                                                                onClick={() => toggleUserAssignment(task.id, user.id, isAssigned)}
+                                                              >
+                                                                <Checkbox
+                                                                  id={`user-${user.id || index}-task-${task.id}`}
+                                                                  checked={isAssigned}
+                                                                />
+                                                                <div className="flex items-center ml-2">
+                                                                  <UserAvatar user={user} size="sm" />
+                                                                  <span className="ml-2 text-sm">{user.name}</span>
+                                                                </div>
+                                                              </div>
+                                                            );
+                                                          })}
+                                                        </div>
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  </div>
+                                                  
+                                                  {/* Due Date */}
+                                                  <div className="col-span-1">
+                                                    <input 
+                                                      type="date"
+                                                      value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
+                                                      onChange={(e) => updateTaskDueDate(task.id, e.target.value)}
+                                                      className="h-8 px-2 py-1 text-sm border border-gray-200 dark:border-gray-700 rounded-md bg-transparent w-full"
+                                                    />
+                                                  </div>
+                                                  
+                                                  {/* Comments */}
+                                                  <div className="col-span-1">
+                                                    <CommentPopover 
+                                                      trigger={
+                                                        <Button
+                                                          variant="outline"
+                                                          size="sm"
+                                                          className="w-full h-8 flex justify-between items-center px-2 shadow-none border border-gray-200 dark:border-gray-700"
+                                                        >
+                                                          <MessageCircle className="h-4 w-4" />
+                                                          <span className="ml-1">{(task.comments?.length || 0)}</span>
+                                                        </Button>
+                                                      }
+                                                    >
+                                                      <div className="p-3">
+                                                        <h3 className="font-medium mb-2">{task.title}</h3>
+                                                        <div className="space-y-2 max-h-48 overflow-y-auto mb-3">
+                                                          {task.comments && task.comments.length > 0 ? (
+                                                            task.comments.map(comment => (
+                                                              <div key={comment.id} className="p-2 bg-gray-50 dark:bg-gray-800 rounded-md">
+                                                                <div className="flex justify-between items-start mb-1">
+                                                                  <div className="font-medium text-xs">{comment.user?.name || 'User'}</div>
+                                                                  <div className="flex items-center gap-1">
+                                                                    <span className="text-xs text-gray-500 whitespace-nowrap">
+                                                                      {new Date(comment.created_at).toLocaleString(undefined, {
+                                                                        month: 'numeric',
+                                                                        day: 'numeric',
+                                                                        hour: 'numeric',
+                                                                        minute: 'numeric'
+                                                                      })}
+                                                                    </span>
+                                                                    <Button 
+                                                                      variant="ghost" 
+                                                                      size="sm"
+                                                                      className="h-6 w-6 p-0 flex-shrink-0" 
+                                                                      onClick={() => setEditingComment(comment.id)}
+                                                                    >
+                                                                      <PencilIcon className="h-3 w-3 text-gray-500" />
+                                                                    </Button>
+                                                                    <Button 
+                                                                      variant="ghost" 
+                                                                      size="sm" 
+                                                                      className="h-6 w-6 p-0 flex-shrink-0 text-red-600" 
+                                                                      onClick={() => handleDeleteComment(task.id, comment.id)}
+                                                                    >
+                                                                      <Trash2 className="h-3 w-3" />
+                                                                    </Button>
+                                                                  </div>
+                                                                </div>
+                                                                
+                                                                {editingComment === comment.id ? (
+                                                                  <form 
+                                                                    onSubmit={(e) => {
+                                                                      e.preventDefault();
+                                                                      addComment(task.id, e.target.comment.value, comment.id);
+                                                                    }}
+                                                                    className="flex gap-1 mt-1"
+                                                                  >
+                                                                    <Input 
+                                                                      name="comment" 
+                                                                      defaultValue={comment.content}
+                                                                      className="text-xs py-1" 
+                                                                      autoFocus
+                                                                    />
+                                                                    <Button type="submit" size="sm" className="h-7 text-xs flex-shrink-0">Save</Button>
+                                                                  </form>
+                                                                ) : (
+                                                                  <p className="text-sm break-words">{comment.content}</p>
+                                                                )}
+                                                              </div>
+                                                            ))
+                                                          ) : (
+                                                            <div className="text-sm text-gray-500">No comments yet</div>
+                                                          )}
+                                                        </div>
+                                                        <div className="flex gap-2">
+                                                          <Input 
+                                                            value={newComment}
+                                                            onChange={(e) => setNewComment(e.target.value)}
+                                                            placeholder="Add a comment..."
+                                                            className="text-sm"
+                                                          />
+                                                          <Button 
+                                                            size="sm" 
+                                                            onClick={() => {
+                                                              if (newComment.trim()) {
+                                                                handleAddComment(task.id, newComment);
+                                                              }
+                                                            }}
+                                                            disabled={!newComment.trim()}
+                                                          >
+                                                            Add
+                                                          </Button>
+                                                        </div>
+                                                      </div>
+                                                    </CommentPopover>
+                                                  </div>
+                                                  
+                                                  {/* Hours */}
+                                                  <div className="col-span-1 flex items-center gap-2 justify-between">
+                                                    <input 
+                                                      type="text" 
+                                                      value={task.estimated_hours || ''}
+                                                      onChange={(e) => {
+                                                        const value = e.target.value;
+                                                        if (/^[0-9]*\.?[0-9]*$/.test(value) || value === '') {
+                                                          updateTaskHours(task.id, 'estimated_hours', parseFloat(value) || 0);
+                                                        }
+                                                      }}
+                                                      className="w-10 bg-transparent border border-gray-200 dark:border-gray-700 rounded-md text-sm p-1 text-center shadow-none"
+                                                    />
+                                                    <CircularProgress 
+                                                      value={{
+                                                        actual: task.actual_hours || 0,
+                                                        estimated: task.estimated_hours || 0.01
+                                                      }}
+                                                      size={16}
+                                                    />
+                                                  </div>
+                                                  
+                                                  {/* Actions */}
+                                                  <div className="col-span-1 flex justify-end gap-1">
+                                                    <Button 
+                                                      variant="ghost" 
+                                                      size="sm"
+                                                      onClick={() => setItemToDelete({ type: 'task', projectId: project.id, taskId: task.id })}
+                                                      className="w-7 h-7 p-0 text-red-600"
+                                                    >
+                                                      <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </SortableTask>
+                                          ))}
+                                        </SortableContext>
+                                      </DndContext>
+                                    ) : (
+                                      <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                                        No tasks yet. Click "Add Task" to create one.
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </Card>
+                          )}
+                        </SortableProject>
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+                                                  </div>
+            ) : (
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Kanban view */}
+                <div className="grid grid-cols-5 gap-4 h-full">
+                  {['To Do', 'In Progress', 'In Review', 'Completed', 'Blocked'].map(status => {
+                    // Get all tasks with this status from all projects
+                    const tasksWithStatus = projects.flatMap(project => 
+                      project.tasks?.filter(task => task.status === status) || []
+                    );
+                    
+                    return (
+                      <div key={status} className="flex flex-col h-full">
+                        <div className={`p-2 rounded-t-md font-medium text-white text-sm ${
+                          status === 'To Do' ? 'bg-gray-400' :
+                          status === 'In Progress' ? 'bg-blue-400' :
+                          status === 'In Review' ? 'bg-amber-400' :
+                          status === 'Completed' ? 'bg-green-400' :
+                          'bg-red-400'
+                        }`}>
+                          {status} ({tasksWithStatus.length})
+                                                  </div>
+                                                  
+                        <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-b-md p-2 overflow-y-auto">
+                          <DndContext 
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={(event) => {
+                              const { active, over } = event;
+                              
+                              if (active.id !== over?.id) {
+                                // Find the task and update its status
+                                const taskId = active.id;
+                                updateTaskStatus(taskId, status);
+                              }
+                            }}
+                          >
+                            <SortableContext 
+                              items={tasksWithStatus.map(task => task.id)}
+                              strategy={verticalListSortingStrategy}
+                            >
+                              {tasksWithStatus.map(task => (
+                                <SortableTask key={task.id} task={task}>
+                                  {({ dragHandleProps }) => (
+                                    <div 
+                                      className="bg-white dark:bg-gray-700 p-3 rounded-md shadow-sm mb-2 cursor-pointer"
+                                      onClick={() => handleTaskClick(task)}
+                                    >
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <div {...dragHandleProps} className="cursor-grab">
+                                          <GripVertical className="w-4 h-4 text-gray-400" />
+                                                                </div>
+                                        <div className="font-medium text-sm truncate flex-1">{task.title}</div>
+                                                              </div>
+                                                              
+                                      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                                        <div className="flex items-center gap-1">
+                                          {task.due_date && (
+                                            <span>{new Date(task.due_date).toLocaleDateString()}</span>
+                                                        )}
+                                                      </div>
+                                                      
+                                        <div className="flex items-center gap-1">
+                                          {task.assigned_to && task.assigned_to.length > 0 ? (
+                                            <div className="flex -space-x-1">
+                                              {task.assigned_to.slice(0, 2).map(user => (
+                                                <UserAvatar key={user.id} user={user} size="sm" />
+                                              ))}
+                                              {task.assigned_to.length > 2 && (
+                                                <div className="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center text-xs">
+                                                  +{task.assigned_to.length - 2}
+                                                      </div>
+                                              )}
+                                                  </div>
+                                          ) : (
+                                            <span>Unassigned</span>
+                                          )}
+                                                  </div>
+                    </div>
+                                                </div>
+                                              )}
+                                            </SortableTask>
+                                          ))}
+                                        </SortableContext>
+                                      </DndContext>
+                                      </div>
+                      </div>
+                    );
+                  })}
+                                  </div>
+                </div>
+              )}
+      </div>
+    </div>
+      </div>
+
+      {/* Delete confirmation dialog */}
+      {itemToDelete && (
+        <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+              <AlertDialogTitle>Delete {itemToDelete.type === 'project' ? 'Project' : 'Task'}</AlertDialogTitle>
+                <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the {itemToDelete.type}.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} className="bg-red-600 text-white hover:bg-red-700">
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+
+        {/* Add the project dialog component to the main page (similar to sidebar) */}
+        <Dialog 
+          open={effectiveProjectDialogOpen} 
+          onOpenChange={effectiveSetProjectDialogOpen}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Create Project</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <Input
+                placeholder="Project name"
+                value={effectiveNewProjectName}
+                onChange={(e) => effectiveSetNewProjectName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    createProjectFromDialog(workspace);
+                  }
+                }}
+                className="bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border-gray-200 dark:border-gray-600"
+              />
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => effectiveSetProjectDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => createProjectFromDialog(workspace)} 
+                className="bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              >
+                Create
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+  );
+};
+
+export default ProjectManagementApp;
