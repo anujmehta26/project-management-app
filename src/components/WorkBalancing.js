@@ -17,6 +17,10 @@ const WorkBalancing = () => {
   const [estimatedHours, setEstimatedHours] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [activeTaskId, setActiveTaskId] = useState(null);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [timerInterval, setTimerInterval] = useState(null);
 
   useEffect(() => {
     const loadMyTasks = async () => {
@@ -114,6 +118,15 @@ const WorkBalancing = () => {
     loadMyTasks();
   }, [session]);
 
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    };
+  }, [timerInterval]);
+
   const handleEstimatedHoursChange = (taskId, hours) => {
     // Validate input - only allow numbers and decimal points
     if (!/^[0-9]*\.?[0-9]*$/.test(hours) && hours !== '') return;
@@ -148,6 +161,98 @@ const WorkBalancing = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const startTimer = (taskId) => {
+    // Clear any existing timer
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+    
+    setActiveTaskId(taskId);
+    setTimerRunning(true);
+    
+    // Start a new timer that updates every second
+    const interval = setInterval(() => {
+      setElapsedTime(prev => prev + 1);
+    }, 1000);
+    
+    setTimerInterval(interval);
+  };
+  
+  const pauseTimer = async () => {
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      setTimerInterval(null);
+    }
+    
+    setTimerRunning(false);
+    
+    // Update actual hours for the task
+    if (activeTaskId && elapsedTime > 0) {
+      const hoursSpent = parseFloat((elapsedTime / 3600).toFixed(2));
+      
+      // Get current task
+      const task = myTasks.find(t => t.id === activeTaskId);
+      if (task) {
+        const currentHours = task.actual_hours || 0;
+        const newHours = currentHours + hoursSpent;
+        
+        // Update in state
+        setMyTasks(prev => prev.map(t => 
+          t.id === activeTaskId ? {...t, actual_hours: newHours} : t
+        ));
+        
+        // Update in database
+        try {
+          await db.updateTask(activeTaskId, {
+            actual_hours: newHours,
+            userId: session.user.id
+          });
+        } catch (error) {
+          console.error('Error updating actual hours:', error);
+        }
+      }
+    }
+    
+    setElapsedTime(0);
+  };
+  
+  const completeTask = async (taskId) => {
+    // First pause the timer if it's running
+    if (timerRunning && activeTaskId === taskId) {
+      await pauseTimer();
+    }
+    
+    // Update task status to completed
+    try {
+      await db.updateTask(taskId, {
+        status: 'completed',
+        userId: session.user.id
+      });
+      
+      // Update in state
+      setMyTasks(prev => prev.map(t => 
+        t.id === taskId ? {...t, status: 'completed'} : t
+      ));
+      
+      setActiveTaskId(null);
+    } catch (error) {
+      console.error('Error completing task:', error);
+    }
+  };
+  
+  // Format seconds into HH:MM:SS
+  const formatTime = (seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    return [
+      hours.toString().padStart(2, '0'),
+      minutes.toString().padStart(2, '0'),
+      secs.toString().padStart(2, '0')
+    ].join(':');
   };
 
   const getStatusLabel = (status) => {
@@ -279,6 +384,78 @@ const WorkBalancing = () => {
             )}
           </div>
           
+          {/* Active Tasks Section */}
+          <div className="mb-6">
+            <h2 className="text-lg font-medium mb-4">Active Tasks</h2>
+            <Card className="border border-gray-200 dark:border-gray-700">
+              <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                {myTasks.filter(task => task.status !== 'completed').length > 0 ? (
+                  myTasks
+                    .filter(task => task.status !== 'completed')
+                    .map(task => {
+                      const colors = getWorkspaceColor(task.workspace?.id);
+                      const isActive = activeTaskId === task.id;
+                      
+                      return (
+                        <div key={task.id} className="p-4">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="flex items-center mb-1">
+                                <div className={`w-2 h-2 rounded-full ${getStatusColor(task.status)} mr-2`}></div>
+                                <h3 className="font-medium text-gray-900 dark:text-gray-100">{task.title}</h3>
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {task.project?.name} <span className="text-gray-400 mx-1">•</span> <span className="text-gray-400">{task.workspace?.name}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              {isActive && timerRunning ? (
+                                <>
+                                  <div className="text-sm font-medium text-blue-600 mr-2">
+                                    {formatTime(elapsedTime)}
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="border-yellow-300 text-yellow-600"
+                                    onClick={pauseTimer}
+                                  >
+                                    Pause
+                                  </Button>
+                                </>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-green-300 text-green-600"
+                                  onClick={() => startTimer(task.id)}
+                                  disabled={timerRunning && activeTaskId !== task.id}
+                                >
+                                  {isActive ? 'Resume' : 'Start'}
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-blue-300 text-blue-600"
+                                onClick={() => completeTask(task.id)}
+                              >
+                                Complete
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                ) : (
+                  <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                    No active tasks
+                  </div>
+                )}
+              </div>
+            </Card>
+          </div>
+          
           {/* Tasks Table */}
           <Card className="border border-gray-200 dark:border-gray-700">
             <div className="overflow-x-auto">
@@ -301,7 +478,9 @@ const WorkBalancing = () => {
                         <tr key={task.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
                           <td className="px-4 py-3 text-sm">
                             <div className="font-medium text-gray-900 dark:text-gray-100">{task.title}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">{task.workspace?.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {task.project?.name} <span className="text-gray-400 mx-1">•</span> <span className="text-gray-400">{task.workspace?.name}</span>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm">
                             <div className={`inline-flex text-xs px-2 py-1 rounded-full ${colors.bg ? colors.bg.replace('bg-', 'bg-opacity-20 ') : 'bg-blue-100'} ${colors.text || 'text-blue-800'}`}>

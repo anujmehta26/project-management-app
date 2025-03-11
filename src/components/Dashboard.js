@@ -191,6 +191,23 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
     }
   };
 
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'not_started':
+        return 'bg-gray-200';
+      case 'in_progress':
+        return 'bg-blue-200';
+      case 'blocked':
+        return 'bg-red-200';
+      case 'in_review':
+        return 'bg-yellow-200';
+      case 'completed':
+        return 'bg-green-200';
+      default:
+        return 'bg-gray-200';
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="app-header flex justify-between items-center p-4 border-b">
@@ -442,7 +459,7 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
                                   <h3 className="font-medium text-gray-900 dark:text-gray-100">{task.title}</h3>
                                 </div>
                                 <div className="text-sm text-gray-500 dark:text-gray-400">
-                                  {task.project?.name} • {task.workspace?.name}
+                                  {task.project?.name} <span className="text-gray-400 mx-1">•</span> <span className="text-gray-400">{task.workspace?.name}</span>
                                 </div>
                               </div>
                               <div className="text-sm text-gray-500 dark:text-gray-400">
@@ -542,8 +559,23 @@ const UserAvatar = ({ user, size = 'md' }) => {
 
 const renderTaskOwners = (task) => {
   if (!task.owners || task.owners.length === 0) {
+    if (!task.assigned_to || task.assigned_to.length === 0) {
+      return (
+        <div className="text-gray-500 text-xs">Unassigned</div>
+      );
+    }
+    
+    // If we have assigned_to but no owners, show a placeholder
     return (
-      <div className="text-gray-500 text-xs">Unassigned</div>
+      <div className="flex -space-x-1">
+        {task.assigned_to.map((userId, index) => (
+          <div key={userId || index} className="relative">
+            <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-white text-xs">
+              U
+            </div>
+          </div>
+        ))}
+      </div>
     );
   }
   
