@@ -8,10 +8,8 @@ const nextConfig = {
     return config;
   },
   // Ensure CSS is properly processed
-  experimental: {
-    appDir: true,
-    serverComponentsExternalPackages: [],
-  },
+  // External packages configuration (moved from experimental)
+  serverExternalPackages: [],
   // Disable image optimization if causing issues
   images: {
     disableStaticImages: false,
