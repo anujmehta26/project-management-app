@@ -1,10 +1,10 @@
 'use client'
 
 import React from 'react'
-import { Card, CardContent } from './ui/card'
-import { Button } from './ui/button'
+import {  Card, CardContent  } from '@/components/ui/card'
+import {  Button  } from '@/components/ui/button'
 import { Trash2, Edit, ChevronDown, ChevronRight, Clock, Calendar, User } from 'lucide-react'
-import { Badge } from './ui/badge'
+import {  Badge  } from '@/components/ui/badge'
 
 const statusColors = {
   'not_started': 'bg-gray-200',

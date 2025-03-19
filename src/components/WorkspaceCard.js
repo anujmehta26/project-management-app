@@ -1,14 +1,14 @@
 'use client'
 
-import { Button } from './ui/button';
-import { Card } from './ui/card';
+import {  Button  } from '@/components/ui/button';
+import {  Card  } from '@/components/ui/card';
 import { MoreVertical, Edit2, Trash2, Users, Calendar } from 'lucide-react';
-import {
+import { 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from './ui/dropdown-menu';
+ } from '@/components/ui/dropdown-menu';
 import { motion } from 'framer-motion';
 
 const WorkspaceCard = ({ workspace, onClick, onDelete, onEdit }) => {

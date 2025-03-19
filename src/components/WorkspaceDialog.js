@@ -1,9 +1,9 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { Input } from './ui/input';
-import { Button } from './ui/button';
+import {  Dialog, DialogContent, DialogHeader, DialogTitle  } from '@/components/ui/dialog';
+import {  Input  } from '@/components/ui/input';
+import {  Button  } from '@/components/ui/button';
 import { AlertCircle, Briefcase, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 

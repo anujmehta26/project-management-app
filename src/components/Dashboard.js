@@ -1,9 +1,25 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Card } from './ui/card';
-import { Button } from './ui/button';
-import { Calendar, BarChart3, Clock, Star, FileText, PlusCircle, ChevronRight, Briefcase, Users, Home, Folder, User, BarChart4 } from 'lucide-react';
+import {  Card  } from '@/components/ui/card';
+import {  Button  } from '@/components/ui/button';
+import { 
+  BarChart3, 
+  Clock, 
+  Star, 
+  FileText, 
+  PlusCircle, 
+  ChevronRight, 
+  Briefcase, 
+  Users, 
+  Home, 
+  Folder, 
+  User, 
+  BarChart4, 
+  LayoutDashboard, 
+  CalendarDays,
+  Calendar as CalendarIcon 
+} from 'lucide-react';
 import { db } from '../lib/database';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
@@ -12,8 +28,9 @@ import LayoutWrapper from './LayoutWrapper';
 import UserMenu from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, addDays, isWithinInterval } from 'date-fns';
 import WorkBalancing from './WorkBalancing';
+import Calendar from './Calendar';
 
 const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
   const { data: session } = useSession();
@@ -28,7 +45,7 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const today = format(new Date(), 'EEEE, MMMM d, yyyy');
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' or 'workBalance'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'workBalance', or 'calendar'
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -146,28 +163,18 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
         
         // Calculate upcoming deadlines (due in the next 7 days)
         const now = new Date();
-        const nextWeek = new Date();
-        nextWeek.setDate(now.getDate() + 7);
+        const nextWeek = addDays(now, 7);
         
         const upcomingDeadlines = allTasks.filter(task => {
           if (task.status === 'completed') return false;
           if (!task.due_date) return false;
           
           const dueDate = new Date(task.due_date);
-          if (dueDate > now && dueDate <= nextWeek) {
-            // Check if assigned to current user
-            if (task.owners && Array.isArray(task.owners)) {
-              return task.owners.some(owner => owner && owner.id === session.user.id);
-            }
-            
-            // Check assigned_to array directly
-            if (task.assigned_to && Array.isArray(task.assigned_to)) {
-              return task.assigned_to.includes(session.user.id);
-            }
-          }
+          // Fix timezone issues by setting hours to noon
+          dueDate.setHours(12, 0, 0, 0);
           
-          return false;
-        }).length;
+          return isWithinInterval(dueDate, { start: now, end: nextWeek });
+        });
         
         setStats({
           totalTasks,
@@ -223,16 +230,25 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
       
       <div className="flex border-b">
         <button
-          className={`px-4 py-2 font-medium ${activeTab === 'overview' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`px-4 py-2 font-medium flex items-center ${activeTab === 'overview' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
           onClick={() => setActiveTab('overview')}
         >
+          <LayoutDashboard className="h-4 w-4 mr-2" />
           Overview
         </button>
         <button
-          className={`px-4 py-2 font-medium ${activeTab === 'workBalance' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          className={`px-4 py-2 font-medium flex items-center ${activeTab === 'workBalance' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
           onClick={() => setActiveTab('workBalance')}
         >
-          Work Balance
+          <BarChart3 className="h-4 w-4 mr-2" />
+          Workload
+        </button>
+        <button
+          className={`px-4 py-2 font-medium flex items-center ${activeTab === 'calendar' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+          onClick={() => setActiveTab('calendar')}
+        >
+          <CalendarDays className="h-4 w-4 mr-2" />
+          Calendar
         </button>
         </div>
         
@@ -257,8 +273,8 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
                     <div>
                       <p className="text-gray-500 dark:text-gray-400 text-sm">Total Tasks</p>
                       <h3 className="text-2xl font-bold">{stats.totalTasks}</h3>
-                    </div>
-                  </div>
+              </div>
+            </div>
                   <div className="mt-4">
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-gray-500 dark:text-gray-400">
@@ -275,29 +291,29 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
                           width: `${stats.totalTasks ? Math.round((stats.completedTasks / stats.totalTasks) * 100) : 0}%` 
                         }}
                       ></div>
-                    </div>
-                  </div>
-                </Card>
+              </div>
+            </div>
+          </Card>
           
                 <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/30 border border-green-200 dark:border-green-800">
                   <div className="flex items-center">
                     <div className="p-3 rounded-full bg-green-100 dark:bg-green-900 mr-4">
-                      <BarChart3 className="h-6 w-6 text-green-600 dark:text-green-400" />
+                      <Clock className="h-6 w-6 text-green-600 dark:text-green-400" />
                     </div>
                     <div>
-                      <p className="text-gray-500 dark:text-gray-400 text-sm">Completed</p>
-                      <h3 className="text-2xl font-bold">{stats.completedTasks}</h3>
+                      <p className="text-gray-500 dark:text-gray-400 text-sm">Hours This Week</p>
+                      <h3 className="text-2xl font-bold">{activeTasks.reduce((sum, task) => sum + (task.actual_hours || 0), 0).toFixed(1)}</h3>
                     </div>
                   </div>
                   <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-                    {stats.totalTasks ? (
+                    {activeTasks.length > 0 ? (
                       <span>
-                        No tasks yet
+                        {activeTasks.filter(task => task.actual_hours && task.actual_hours > 0).length} tasks with logged time
                       </span>
                     ) : (
-                      <span>No tasks yet</span>
-                    )}
-                  </div>
+                      <span>No active tasks with logged time</span>
+                  )}
+                </div>
                 </Card>
           
                 <Card className="p-4 bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-900/30 dark:to-amber-800/30 border border-amber-200 dark:border-amber-800">
@@ -316,83 +332,6 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
                 </Card>
               </div>
         
-        {/* Recent Projects */}
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-bold">Recent Projects</h2>
-                  <Button 
-                    variant="ghost" 
-                    size="sm"
-                    className="text-blue-600 hover:text-blue-700"
-                    onClick={handleNavigateToWorkspaces}
-                  >
-                    View All
-                    <ChevronRight className="h-4 w-4 ml-1" />
-                  </Button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {recentProjects.length > 0 ? (
-                    recentProjects.map(project => {
-                      const colors = getWorkspaceColor(project.workspace?.id);
-                      return (
-                        <Card 
-                          key={project.id}
-                          className="p-4 cursor-pointer hover:shadow-md transition-all duration-200 border border-gray-200 dark:border-gray-700"
-                          onClick={() => handleSelectProject(project)}
-                        >
-                          <div className="flex items-center mb-3">
-                            <div 
-                              className={`w-10 h-10 rounded-md flex items-center justify-center mr-3 ${colors.icon}`}
-                            >
-                              <Folder className="h-5 w-5" />
-                            </div>
-                            <div>
-                              <h3 className="font-medium">{project.name}</h3>
-                              <p className="text-xs text-gray-500">
-                                {project.workspace?.name} • {project.tasks?.length || 0} tasks
-                              </p>
-                            </div>
-                          </div>
-                          
-                          <div className="mt-3 flex -space-x-2">
-                            {project.tasks?.slice(0, 3)
-                              .filter(task => task.assigned_to && task.assigned_to.length)
-                              .flatMap(task => task.assigned_to)
-                              .filter((user, index, self) => 
-                                index === self.findIndex(u => u.id === user.id)
-                              )
-                              .slice(0, 3)
-                              .map((user, index) => (
-                                <div key={index} className="w-8 h-8 rounded-full border-2 border-white dark:border-gray-800 overflow-hidden bg-gray-200">
-                                  {user.image ? (
-                                    <img src={user.image} alt={user.name} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-blue-500 text-white text-xs font-bold">
-                                      {user.name?.charAt(0) || 'U'}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                          </div>
-                        </Card>
-                      );
-                    })
-                  ) : (
-                    <div className="col-span-3 text-center py-8 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="text-gray-500 dark:text-gray-400 mb-4">No recent projects</div>
-                      <Button 
-                        onClick={handleNavigateToWorkspaces}
-                        className="bg-blue-600 hover:bg-blue-700 text-white"
-                      >
-                        Create a Project
-                        <PlusCircle className="ml-2 h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            
               {/* Workspaces */}
               <div>
                 <div className="flex justify-between items-center mb-4">
@@ -431,9 +370,9 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
                               <p className="text-xs text-gray-500">
                                 {workspace.project_count || 0} projects
                               </p>
-                            </div>
-                          </div>
-                        </Card>
+                  </div>
+                </div>
+              </Card>
                       );
                     })}
                 </div>
@@ -443,8 +382,8 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-lg font-bold">Active Tasks</h2>
-                </div>
-                
+        </div>
+        
                 {activeTasks.length > 0 ? (
                   <Card className="border border-gray-200 dark:border-gray-700">
                     <div className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -453,7 +392,7 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
                         return (
                           <div key={task.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                             <div className="flex justify-between items-start">
-                              <div>
+        <div>
                                 <div className="flex items-center mb-1">
                                   <div className={`w-2 h-2 rounded-full ${statusColor} mr-2`}></div>
                                   <h3 className="font-medium text-gray-900 dark:text-gray-100">{task.title}</h3>
@@ -465,8 +404,8 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
                               <div className="text-sm text-gray-500 dark:text-gray-400">
                                 {task.due_date ? (
                                   <div className="flex items-center">
-                                    <Calendar className="h-3 w-3 mr-1" />
-                                    {new Date(task.due_date).toLocaleDateString()}
+                                    <CalendarIcon className="h-3 w-3 mr-1" />
+                                    {format(new Date(task.due_date), 'MMM d, yyyy')}
                                   </div>
                                 ) : (
                                   <span>No due date</span>
@@ -476,8 +415,8 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
                           </div>
                         );
                       })}
-                    </div>
-                  </Card>
+              </div>
+            </Card>
                 ) : (
                   <div className="text-center py-8 bg-gray-50 dark:bg-gray-800 rounded-lg">
                     <div className="text-gray-500 dark:text-gray-400">No active tasks</div>
@@ -487,9 +426,13 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
             </div>
           )}
         </div>
-      ) : (
+      ) : activeTab === 'workBalance' ? (
         <div className="flex-1 overflow-auto">
           <WorkBalancing />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto">
+          <Calendar />
         </div>
       )}
     </div>
@@ -497,23 +440,44 @@ const Dashboard = ({ onSelectWorkspace, onLogout, onNavigateToWorkspaces }) => {
 };
 
 const UserAvatar = ({ user, size = 'md' }) => {
-  if (!user) return null;
-  
-  // Get initials from name
-  let initials = '?';
-  if (user.name) {
-    const nameParts = user.name.split(' ').filter(part => part.length > 0);
-    if (nameParts.length === 1) {
-      initials = nameParts[0].charAt(0).toUpperCase();
-    } else if (nameParts.length > 1) {
-      initials = (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
-    }
-  } else if (user.email) {
-    initials = user.email.charAt(0).toUpperCase();
+  // If no user provided, show generic avatar
+  if (!user) {
+    return (
+      <div className={`${sizeClasses[size]} rounded-full bg-gray-300 flex items-center justify-center text-gray-600`}>
+        <User className="w-3 h-3" />
+              </div>
+    );
   }
   
-  // Ensure we have a valid user ID for color
-  const userId = user.id || '12345';
+  // Extract user id even if it's a string or object
+  const userId = typeof user === 'object' ? user.id : String(user);
+  
+  // Get user name or email or use id to create consistent display
+  let displayName = '';
+  let initials = '';
+  
+  if (typeof user === 'object') {
+    // For object users, use name or email
+    displayName = user.name || user.email || '';
+    
+    // If we have a valid displayName, get initials
+    if (displayName) {
+      // Split the name and get the first letter of each part
+      const parts = displayName.split(' ').filter(part => part.length > 0);
+      if (parts.length === 1) {
+        initials = parts[0].charAt(0).toUpperCase();
+      } else if (parts.length > 1) {
+        // Get first letter of first and last name
+        initials = (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+      }
+    } else {
+      // Generate consistent initials from user ID
+      initials = String(userId).substring(0, 1).toUpperCase();
+    }
+  } else {
+    // For string users (just an ID), use the first character
+    initials = String(userId).substring(0, 1).toUpperCase();
+  }
   
   // Directly use a vibrant color based on user ID
   const colors = [
@@ -550,10 +514,10 @@ const UserAvatar = ({ user, size = 'md' }) => {
     <div 
       className={`${sizeClasses[size]} rounded-full flex items-center justify-center text-white font-medium`}
       style={{ backgroundColor: bgColor }}
-      title={user.name || user.email || 'User'}
+      title={typeof user === 'object' ? (user.name || user.email || 'User') : 'User'}
     >
       {initials}
-    </div>
+              </div>
   );
 };
 
@@ -565,14 +529,12 @@ const renderTaskOwners = (task) => {
       );
     }
     
-    // If we have assigned_to but no owners, show a placeholder
+    // If we have assigned_to but no owners, use UserAvatar component
     return (
       <div className="flex -space-x-1">
         {task.assigned_to.map((userId, index) => (
           <div key={userId || index} className="relative">
-            <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center text-white text-xs">
-              U
-            </div>
+            <UserAvatar user={userId} size="sm" />
           </div>
         ))}
       </div>

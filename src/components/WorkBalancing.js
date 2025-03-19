@@ -1,13 +1,13 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Card } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Clock, Calendar, User, Save, AlertCircle, BarChart3, FileText, CheckCircle } from 'lucide-react';
+import {  Card  } from '@/components/ui/card';
+import {  Button  } from '@/components/ui/button';
+import {  Input  } from '@/components/ui/input';
+import { Clock, Calendar, User, Save, AlertCircle, BarChart3, FileText, CheckCircle, Play, Pause, CheckSquare, Briefcase, Folder } from 'lucide-react';
 import { db } from '../lib/database';
 import { useSession } from 'next-auth/react';
-import { format } from 'date-fns';
+import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import { getWorkspaceColor } from '../lib/utils';
 
 const WorkBalancing = () => {
@@ -131,9 +131,21 @@ const WorkBalancing = () => {
     // Validate input - only allow numbers and decimal points
     if (!/^[0-9]*\.?[0-9]*$/.test(hours) && hours !== '') return;
     
+    // Update local state
     setEstimatedHours(prev => ({
       ...prev,
       [taskId]: hours === '' ? 0 : parseFloat(hours)
+    }));
+    
+    // Update the task in the myTasks array
+    setMyTasks(prev => prev.map(task => {
+      if (task.id === taskId) {
+        return {
+          ...task,
+          estimated_hours: hours === '' ? 0 : parseFloat(hours)
+        };
+      }
+      return task;
     }));
   };
 
@@ -284,8 +296,29 @@ const WorkBalancing = () => {
   // Calculate stats
   const totalTasks = myTasks.length;
   const completedTasks = myTasks.filter(task => task.status === 'completed').length;
-  const totalEstimatedHours = getTotalEstimatedHours();
-  const recommendedWeeklyHours = Math.min(40, totalEstimatedHours);
+  
+  // Calculate total hours worked today
+  const today = new Date();
+  const todayStart = startOfDay(today);
+  const todayEnd = endOfDay(today);
+  
+  // Calculate total hours worked this week
+  const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Week starts on Monday
+  const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+  
+  // Sum up actual hours for all tasks
+  const totalHoursWorkedToday = myTasks.reduce((sum, task) => {
+    // For simplicity, we'll assume all hours were logged today
+    // In a real app, you'd track when hours were logged
+    return sum + (task.actual_hours || 0);
+  }, 0);
+  
+  // Sum up actual hours for all tasks this week
+  const totalHoursWorkedThisWeek = myTasks.reduce((sum, task) => {
+    // For simplicity, we'll assume all hours were logged this week
+    // In a real app, you'd track when hours were logged
+    return sum + (task.actual_hours || 0);
+  }, 0);
 
   return (
     <div className="p-4">
@@ -336,15 +369,15 @@ const WorkBalancing = () => {
                   <BarChart3 className="h-6 w-6 text-green-600 dark:text-green-400" />
                 </div>
                 <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">Estimated Hours</p>
-                  <h3 className="text-2xl font-medium">{totalEstimatedHours.toFixed(1)}</h3>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">Total Hours Worked</p>
+                  <h3 className="text-2xl font-medium">{totalHoursWorkedToday.toFixed(1)}</h3>
                 </div>
               </div>
               <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-                {totalEstimatedHours > 0 ? (
-                  <span>Total hours across all tasks</span>
+                {totalHoursWorkedToday > 0 ? (
+                  <span>Hours worked today</span>
                 ) : (
-                  <span>No estimated hours yet</span>
+                  <span>No hours logged today</span>
                 )}
               </div>
             </Card>
@@ -355,171 +388,183 @@ const WorkBalancing = () => {
                   <Clock className="h-6 w-6 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">Weekly Target</p>
-                  <h3 className="text-2xl font-medium">{recommendedWeeklyHours.toFixed(1)} hrs</h3>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">Weekly Total</p>
+                  <h3 className="text-2xl font-medium">{totalHoursWorkedThisWeek.toFixed(1)} hrs</h3>
                 </div>
               </div>
               <div className="mt-4 text-sm text-gray-500 dark:text-gray-400">
-                Recommended weekly hours
+                Total hours worked this week
               </div>
             </Card>
           </div>
           
-          {/* Save Button */}
-          <div className="flex justify-end">
-            <Button 
-              onClick={saveEstimates} 
-              disabled={saving}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              {saving ? 'Saving...' : 'Save Estimates'}
-              <Save className="ml-2 h-4 w-4" />
-            </Button>
-            
-            {saveSuccess && (
-              <div className="ml-2 text-green-600 flex items-center">
-                <CheckCircle className="h-4 w-4 mr-1" />
-                <span>Saved</span>
-              </div>
-            )}
-          </div>
-          
-          {/* Active Tasks Section */}
+          {/* Active Tasks Section with Save Button */}
           <div className="mb-6">
-            <h2 className="text-lg font-medium mb-4">Active Tasks</h2>
-            <Card className="border border-gray-200 dark:border-gray-700">
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {myTasks.filter(task => task.status !== 'completed').length > 0 ? (
-                  myTasks
-                    .filter(task => task.status !== 'completed')
-                    .map(task => {
-                      const colors = getWorkspaceColor(task.workspace?.id);
-                      const isActive = activeTaskId === task.id;
-                      
-                      return (
-                        <div key={task.id} className="p-4">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <div className="flex items-center mb-1">
-                                <div className={`w-2 h-2 rounded-full ${getStatusColor(task.status)} mr-2`}></div>
-                                <h3 className="font-medium text-gray-900 dark:text-gray-100">{task.title}</h3>
-                              </div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {task.project?.name} <span className="text-gray-400 mx-1">•</span> <span className="text-gray-400">{task.workspace?.name}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              {isActive && timerRunning ? (
-                                <>
-                                  <div className="text-sm font-medium text-blue-600 mr-2">
-                                    {formatTime(elapsedTime)}
-                                  </div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="border-yellow-300 text-yellow-600"
-                                    onClick={pauseTimer}
-                                  >
-                                    Pause
-                                  </Button>
-                                </>
-                              ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-green-300 text-green-600"
-                                  onClick={() => startTimer(task.id)}
-                                  disabled={timerRunning && activeTaskId !== task.id}
-                                >
-                                  {isActive ? 'Resume' : 'Start'}
-                                </Button>
-                              )}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-blue-300 text-blue-600"
-                                onClick={() => completeTask(task.id)}
-                              >
-                                Complete
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                ) : (
-                  <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-                    No active tasks
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-medium">Active Tasks</h2>
+              <div className="flex items-center">
+                <Button 
+                  onClick={saveEstimates} 
+                  disabled={saving}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {saving ? 'Saving...' : 'Save Estimates'}
+                  <Save className="ml-2 h-4 w-4" />
+                </Button>
+                
+                {saveSuccess && (
+                  <div className="ml-2 text-green-600 flex items-center">
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    <span>Saved</span>
                   </div>
                 )}
               </div>
-            </Card>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {myTasks.filter(task => task.status !== 'completed').length > 0 ? (
+                myTasks
+                  .filter(task => task.status !== 'completed')
+                  .map(task => {
+                    const colors = getWorkspaceColor(task.workspace?.id);
+                    const isActive = activeTaskId === task.id;
+                    
+                    return (
+                      <Card 
+                        key={task.id} 
+                        className="bg-white dark:bg-gray-800 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow"
+                      >
+                        <div className="p-4">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2 h-2 rounded-full ${getStatusColor(task.status)}`}></div>
+                              <h3 className="font-medium text-gray-900 dark:text-gray-100 line-clamp-1">{task.title}</h3>
+                            </div>
+                            {isActive && timerRunning && (
+                              <div className="text-sm font-medium text-blue-600">
+                                {formatTime(elapsedTime)}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mb-3 flex items-center">
+                            <Folder className="h-3 w-3 mr-1" />
+                            {task.project?.name || 'No project'} 
+                            <span className="text-gray-400 mx-1">•</span> 
+                            <span className="text-gray-400">{task.workspace?.name || 'No workspace'}</span>
+                          </div>
+                          
+                          <div className="flex justify-end items-center space-x-2 mt-2">
+                            {isActive && timerRunning ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-8 p-0 border-yellow-300 text-yellow-600"
+                                onClick={pauseTimer}
+                                title="Pause"
+                              >
+                                <Pause className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 w-8 p-0 border-green-300 text-green-600"
+                                onClick={() => startTimer(task.id)}
+                                disabled={timerRunning && activeTaskId !== task.id}
+                                title={isActive ? 'Resume' : 'Start'}
+                              >
+                                <Play className="h-4 w-4" />
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 w-8 p-0 border-blue-300 text-blue-600"
+                              onClick={() => completeTask(task.id)}
+                              title="Complete"
+                            >
+                              <CheckSquare className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })
+              ) : (
+                <div className="col-span-full p-8 text-center text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  No active tasks
+                </div>
+              )}
+            </div>
           </div>
           
           {/* Tasks Table */}
           <Card className="border border-gray-200 dark:border-gray-700">
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Task</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Project</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Due Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Est. Hours</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actual Hours</th>
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left p-4 font-medium text-gray-500 dark:text-gray-400">Task</th>
+                    <th className="text-left p-4 font-medium text-gray-500 dark:text-gray-400">Project</th>
+                    <th className="text-left p-4 font-medium text-gray-500 dark:text-gray-400">Status</th>
+                    <th className="text-left p-4 font-medium text-gray-500 dark:text-gray-400">Due Date</th>
+                    <th className="text-left p-4 font-medium text-gray-500 dark:text-gray-400">Actual Hours</th>
+                    <th className="text-left p-4 font-medium text-gray-500 dark:text-gray-400">Total Hours</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody>
                   {myTasks.length > 0 ? (
-                    myTasks.map(task => {
-                      const colors = getWorkspaceColor(task.workspace?.id);
-                      return (
-                        <tr key={task.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                          <td className="px-4 py-3 text-sm">
-                            <div className="font-medium text-gray-900 dark:text-gray-100">{task.title}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                              {task.project?.name} <span className="text-gray-400 mx-1">•</span> <span className="text-gray-400">{task.workspace?.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            <div className={`inline-flex text-xs px-2 py-1 rounded-full ${colors.bg ? colors.bg.replace('bg-', 'bg-opacity-20 ') : 'bg-blue-100'} ${colors.text || 'text-blue-800'}`}>
-                              {task.project?.name}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            <span className={`inline-flex px-2 py-1 text-xs rounded-full ${getStatusColor(task.status)}`}>
-                              {getStatusLabel(task.status)}
+                    myTasks.map(task => (
+                      <tr key={task.id} className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="p-4">
+                          <div className="flex items-center">
+                            <div className={`w-2 h-2 rounded-full ${getStatusColor(task.status)} mr-2`}></div>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{task.title}</span>
+                          </div>
+                        </td>
+                        <td className="p-4 text-gray-500 dark:text-gray-400">
+                          {task.project?.name || 'No project'}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center">
+                            <div className={`w-2 h-2 rounded-full ${getStatusColor(task.status)} mr-2`}></div>
+                            <span className="text-gray-500 dark:text-gray-400">
+                              {task.status === 'not_started' ? 'Not Started' : 
+                               task.status === 'in_progress' ? 'In Progress' : 
+                               task.status === 'blocked' ? 'Blocked' : 
+                               task.status === 'in_review' ? 'In Review' : 
+                               task.status === 'completed' ? 'Completed' : 'Not Started'}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                            {task.due_date ? (
-                              <div className="flex items-center">
-                                <Calendar className="h-3 w-3 mr-1" />
-                                {format(new Date(task.due_date), 'MMM d, yyyy')}
-                              </div>
-                            ) : (
-                              <span>No due date</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-sm">
-                            <Input
-                              type="text"
-                              value={estimatedHours[task.id] || ''}
-                              onChange={(e) => handleEstimatedHoursChange(task.id, e.target.value)}
-                              className="w-20 h-8 text-center"
-                            />
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                            {task.actual_hours || 0}
-                          </td>
-                        </tr>
-                      );
-                    })
+                          </div>
+                        </td>
+                        <td className="p-4 text-gray-500 dark:text-gray-400">
+                          {task.due_date ? (
+                            <div className="flex items-center">
+                              <Calendar className="h-3 w-3 mr-1" />
+                              {format(new Date(task.due_date), 'MMM d, yyyy')}
+                            </div>
+                          ) : (
+                            <span>Not set</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-gray-500 dark:text-gray-400">
+                          <div className="flex items-center">
+                            <Clock className="h-3 w-3 mr-1" />
+                            <span className="w-16 text-center">{task.actual_hours || 0}</span>
+                          </div>
+                        </td>
+                        <td className="p-4 text-gray-500 dark:text-gray-400">
+                          <div className="flex items-center">
+                            <BarChart3 className="h-3 w-3 mr-1" />
+                            <span className="w-16 text-center">{task.estimated_hours || 0}</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
                   ) : (
                     <tr>
-                      <td colSpan="6" className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
-                        No tasks assigned to you
+                      <td colSpan="6" className="p-8 text-center text-gray-500 dark:text-gray-400">
+                        No tasks found
                       </td>
                     </tr>
                   )}

@@ -1,6 +1,6 @@
 'use client'
 
-import { Card } from './ui/card'
+import {  Card  } from '@/components/ui/card'
 import { format } from 'date-fns'
 
 export function ProjectCard({ project }) {

@@ -1,16 +1,17 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { PlusCircle, ChevronDown, ChevronRight, ChevronLeft, Trash2, GripVertical, Pencil as PencilIcon, Search, Briefcase, Users, User, MessageCircle, Home, Folder } from 'lucide-react';
-import { Card, CardContent } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "./ui/dialog";
-import { cn, getUserColor } from '../lib/utils';
+import {  Card, CardContent  } from '@/components/ui/card';
+import {  Button  } from '@/components/ui/button';
+import {  Input  } from '@/components/ui/input';
+import {  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter  } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
+import { getUserColor  } from '../lib/utils';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "./ui/alert-dialog";
+import {  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle  } from '@/components/ui/alert-dialog';
 import UserMenu from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
 import LayoutWrapper from './LayoutWrapper';
@@ -18,15 +19,15 @@ import { useSession } from 'next-auth/react';
 import { db } from '../lib/database';
 import { ProjectForm } from './ProjectForm';
 import Sidebar from './Sidebar';
-import { 
+import {  
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
   DropdownMenuSeparator
-} from "./ui/dropdown-menu";
-import { Checkbox } from "./ui/checkbox";
+ } from '@/components/ui/dropdown-menu';
+import {  Checkbox  } from '@/components/ui/checkbox';
 import { useRouter } from 'next/navigation';
 
 // SortableProject component
@@ -78,6 +79,18 @@ const CommentPopover = ({ children, trigger }) => {
   const [isOpen, setIsOpen] = useState(false);
   const popoverRef = useRef(null);
   const triggerRef = useRef(null);
+  const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0 });
+  
+  // Update the position of the popover when the trigger position changes
+  const updatePosition = useCallback(() => {
+    if (triggerRef.current && isOpen) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setPopoverPosition({
+        top: rect.bottom + window.scrollY + 5,
+        left: rect.left - 300 // Adjusted for wider popover
+      });
+    }
+  }, [isOpen]);
   
   // Close popover when clicking outside
   useEffect(() => {
@@ -94,6 +107,20 @@ const CommentPopover = ({ children, trigger }) => {
     };
   }, []);
   
+  // Update position when opening the popover and on scroll
+  useEffect(() => {
+    if (isOpen) {
+      updatePosition();
+      window.addEventListener('scroll', updatePosition);
+      window.addEventListener('resize', updatePosition);
+    }
+    
+    return () => {
+      window.removeEventListener('scroll', updatePosition);
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [isOpen, updatePosition]);
+  
   return (
     <div className="relative">
       <div ref={triggerRef} onClick={() => setIsOpen(!isOpen)}>
@@ -106,8 +133,8 @@ const CommentPopover = ({ children, trigger }) => {
           className="fixed z-50 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700"
           style={{
             width: '400px', // Increased by 25% from 320px
-            top: triggerRef.current ? triggerRef.current.getBoundingClientRect().bottom + window.scrollY + 5 + 'px' : '0px',
-            left: triggerRef.current ? triggerRef.current.getBoundingClientRect().left - 300 + 'px' : '0px', // Adjusted for wider popover
+            top: `${popoverPosition.top}px`,
+            left: `${popoverPosition.left}px`,
             maxHeight: '60vh',
             overflowY: 'auto'
           }}
@@ -131,31 +158,33 @@ const ProjectManagementApp = ({
 }) => {
   const { data: session } = useSession();
   const [projects, setProjects] = useState([]);
-  const [expandedProjects, setExpandedProjects] = useState({});
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [itemToDelete, setItemToDelete] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [workspaceUsers, setWorkspaceUsers] = useState([]);
   const [sidebarProjects, setSidebarProjects] = useState([]);
+  const [expandedProjects, setExpandedProjects] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [allUsers, setAllUsers] = useState([]);
+  const [workspaceUsers, setWorkspaceUsers] = useState([]);
+  const [newTaskInputs, setNewTaskInputs] = useState({});
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [currentProjectId, setCurrentProjectId] = useState(null);
-  const [newTaskInputs, setNewTaskInputs] = useState({});
-  const [allUsers, setAllUsers] = useState([]);
-  const [openStatusDropdowns, setOpenStatusDropdowns] = useState({});
-  const [openOwnerDropdowns, setOpenOwnerDropdowns] = useState({});
-  const [userSearchQuery, setUserSearchQuery] = useState('');
-  const [taskComments, setTaskComments] = useState({});
-  const [editingComment, setEditingComment] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState(null);
+  const [commentText, setCommentText] = useState('');
   const [commentToDelete, setCommentToDelete] = useState(null);
-  const [showProjectForm, setShowProjectForm] = useState(false);
-  const [newProject, setNewProject] = useState({ 
-    name: '', 
-    workspace_id: workspace?.id || '' 
-  });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [taskDetailsOpen, setTaskDetailsOpen] = useState(false);
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState({});
+  const [ownerDropdownOpen, setOwnerDropdownOpen] = useState({});
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [isAddingComment, setIsAddingComment] = useState(false);
   const [localProjectDialogOpen, setLocalProjectDialogOpen] = useState(false);
   const [localNewProjectName, setLocalNewProjectName] = useState('');
-  const [newComment, setNewComment] = useState('');
-  const router = useRouter();
+  const [newProject, setNewProject] = useState({ name: '', workspace_id: workspace?.id || '' });
+  const [taskComments, setTaskComments] = useState({});
+  const [editingComment, setEditingComment] = useState(null);
+  const updateTaskTitleTimeout = useRef(null);
 
   const effectiveProjectDialogOpen = projectDialogOpen !== undefined ? projectDialogOpen : localProjectDialogOpen;
   const effectiveSetProjectDialogOpen = setProjectDialogOpen || setLocalProjectDialogOpen;
@@ -235,8 +264,13 @@ const ProjectManagementApp = ({
 
   const loadProjects = async () => {
     try {
-      if (!workspace || !workspace.id) return;
+      if (!workspace || !workspace.id) {
+        console.warn('Cannot load projects: workspace or workspace.id is missing');
+        return;
+      }
       
+      setIsLoading(true);
+      setError(null);
       console.log("Loading projects for workspace:", workspace.id);
       
       // Get cached users from localStorage
@@ -261,6 +295,14 @@ const ProjectManagementApp = ({
       // Use getProjectsWithTasks instead of getProjectsByWorkspace
       const projectData = await db.getProjectsWithTasks(workspace.id);
       console.log("Projects loaded:", projectData);
+      
+      if (!projectData || projectData.length === 0) {
+        console.log("No projects found for workspace", workspace.id);
+        setProjects([]);
+        setSidebarProjects([]);
+        setIsLoading(false);
+        return;
+      }
       
       // Process the assigned_to field for each task
       const processedProjects = projectData.map(project => {
@@ -324,13 +366,18 @@ const ProjectManagementApp = ({
               // Load comments for this task if they exist
               if (task.comments && Array.isArray(task.comments)) {
                 // Format comments for the UI
-                const formattedComments = task.comments.map(comment => ({
-                  id: comment.id,
-                  text: comment.content,
-                  author: comment.users?.name || 'Anonymous',
-                  timestamp: comment.created_at,
-                  user_id: comment.user_id
-                }));
+                const formattedComments = task.comments.map(comment => {
+                  // Find the user info for this comment if available
+                  const commentUser = availableUsers.find(u => String(u.id) === String(comment.user_id));
+                  
+                  return {
+                    id: comment.id,
+                    text: comment.content,
+                    author: comment.user?.name || commentUser?.name || (comment.user_id ? `User ${comment.user_id.substring(0, 4)}` : 'Anonymous'),
+                    timestamp: comment.created_at,
+                    user_id: comment.user_id
+                  };
+                });
                 
                 // Update the task comments state
                 setTaskComments(prev => ({
@@ -358,9 +405,14 @@ const ProjectManagementApp = ({
         workspace_id: project.workspace_id
       }));
       setSidebarProjects(simplifiedProjects);
+      setIsLoading(false);
       
     } catch (error) {
       console.error("Error loading projects:", error);
+      setError("Failed to load projects. Please try again.");
+      setIsLoading(false);
+      setProjects([]);
+      setSidebarProjects([]);
       handleSupabaseError(error, 'loading projects');
     }
   };
@@ -541,43 +593,68 @@ const ProjectManagementApp = ({
   // Fix the Add Task button functionality to include user ID
   const handleAddTask = async (projectId) => {
     try {
-      // Get the current user ID
-      const userId = session?.user?.id;
-      
-      if (!userId) {
-        console.error('User ID is required');
+      if (!session?.user?.id) {
+        console.error('User ID is required to add a task');
         return;
       }
       
       const newTask = {
-        title: 'New Task',
+        title: '', // Empty title instead of 'New Task'
         description: '',
         status: 'not_started',
+        priority: 'medium',
         position: projects.find(p => p.id === projectId)?.tasks.length || 0,
-        userId: userId, // Add the user ID
-        // Don't include assigned_to if it's empty/undefined
+        userId: session.user.id, // Add the user ID
+        assigned_to: [] // Leave unassigned by default
       };
       
-      const taskId = await db.createTask(projectId, newTask);
+      console.log('Creating new task with data:', { projectId, newTask });
       
-      // Update local state
-      setProjects(projects.map(project => {
+      // Create the task in the database
+      const taskData = await db.createTask(projectId, newTask);
+      console.log('Task created successfully:', taskData);
+      
+      if (!taskData || !taskData.id) {
+        console.error('Failed to create task: No task ID returned');
+        return;
+      }
+      
+      const taskId = taskData.id;
+      
+      // Update local state with the new task including the correct ID
+      setProjects(prevProjects => prevProjects.map(project => {
         if (project.id === projectId) {
           return {
             ...project,
             tasks: [
               ...project.tasks,
               { 
-                id: taskId, 
-                ...newTask 
+                ...newTask,
+                id: taskId,
+                project_id: projectId,
+                created_at: new Date().toISOString(),
+                comments: []
               }
             ]
           };
         }
         return project;
       }));
+      
+      // Focus the new task for immediate editing
+      setTimeout(() => {
+        const taskElement = document.getElementById(`task-title-${taskId}`);
+        if (taskElement) {
+          taskElement.focus();
+          // Select all text in the input field
+          taskElement.select();
+        } else {
+          console.warn(`Could not find task input element with ID: task-title-${taskId}`);
+        }
+      }, 100);
     } catch (error) {
       console.error('Failed to add task:', error);
+      alert('Error creating task: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -590,7 +667,7 @@ const ProjectManagementApp = ({
         ...taskData,
         userId: session.user.id,
         created_by: session.user.id,
-        assigned_to: [session.user.id]
+        assigned_to: []
       });
       
       await loadProjects();
@@ -623,7 +700,7 @@ const ProjectManagementApp = ({
         due_date: null,
         userId: session.user.id,
         created_by: session.user.id,
-        assigned_to: [session.user.id]
+        assigned_to: []
       });
       
       // Clear the input
@@ -641,49 +718,47 @@ const ProjectManagementApp = ({
   // Fix the task title update functionality
   const updateTaskTitle = async (taskId, newTitle) => {
     try {
-      if (!newTitle.trim()) return;
-      
-      // Find the task to get its current data
-      let taskData = null;
+      // Find the task in the projects
+      let taskFound = false;
       let projectId = null;
+      let updatedProjects = [...projects];
       
-      for (const project of projects) {
-        const task = project.tasks.find(t => t.id === taskId);
-        if (task) {
-          taskData = task;
+      for (let i = 0; i < updatedProjects.length; i++) {
+        const project = updatedProjects[i];
+        const taskIndex = project.tasks.findIndex(t => t.id === taskId);
+        
+        if (taskIndex !== -1) {
+          // Update the task title locally
+          updatedProjects[i] = {
+            ...project,
+            tasks: [
+              ...project.tasks.slice(0, taskIndex),
+              {
+                ...project.tasks[taskIndex],
+                title: newTitle
+              },
+              ...project.tasks.slice(taskIndex + 1)
+            ]
+          };
+          taskFound = true;
           projectId = project.id;
           break;
         }
       }
       
-      if (!taskData) {
-        console.error('Task not found');
-        return;
+      if (taskFound) {
+        // Update local state immediately
+        setProjects(updatedProjects);
+        
+        // Save to database
+        await db.updateTask(taskId, { title: newTitle });
+      } else {
+        console.error('Task not found for title update:', taskId);
       }
-      
-      // Update in database
-      await db.updateTask(taskId, { 
-        title: newTitle,
-        userId: session?.user?.id // Ensure user ID is included
-      });
-      
-      // Update locally
-      setProjects(projects.map(project => {
-        if (project.id === projectId) {
-          return {
-            ...project,
-            tasks: project.tasks.map(task => {
-              if (task.id === taskId) {
-                return { ...task, title: newTitle };
-              }
-              return task;
-            })
-          };
-        }
-        return project;
-      }));
     } catch (error) {
       console.error('Failed to update task title:', error);
+      // Reload projects to ensure UI is in sync with database
+      loadProjects();
     }
   };
 
@@ -1180,7 +1255,7 @@ const ProjectManagementApp = ({
             className="flex items-center"
             title={user.name || user.email || 'User'}
           >
-            <UserAvatar user={user} size="sm" />
+            <UserAvatar key={user.id} user={user} size="sm" />
           </div>
         ))}
       </div>
@@ -1194,14 +1269,14 @@ const ProjectManagementApp = ({
       ? Math.min(100, Math.round((value.actual / value.estimated) * 100)) 
       : 0;
     
-    // Determine color based on percentage - simplified color scheme
-    let color = '#10B981'; // Green for normal progress
+    // Determine color based on percentage - updated color scheme
+    let color = '#10B981'; // Green for < 50%
     
-    // Turn red when approaching or exceeding 100%
-    if (percentage >= 90) {
-      color = '#EF4444'; // Red when close to or over budget
-    } else if (percentage >= 75) {
-      color = '#F59E0B'; // Amber when getting closer
+    // Update color based on the requested thresholds
+    if (percentage > 85) {
+      color = '#EF4444'; // Red when above 85%
+    } else if (percentage >= 50) {
+      color = '#F59E0B'; // Yellow/Amber when between 50-85%
     }
     
     // Calculate circle properties
@@ -1260,7 +1335,7 @@ const ProjectManagementApp = ({
             [taskId]: taskCommentList.map(c => 
               c.id === commentId ? { 
                 ...c, 
-                text: comment, 
+                text: comment.trim(), 
                 edited: true,
                 timestamp: new Date().toISOString() // Update timestamp to show it was recently edited
               } : c
@@ -1308,7 +1383,7 @@ const ProjectManagementApp = ({
           return {
             ...prev,
             [taskId]: taskCommentList.map(c => 
-              c.id === commentId ? { ...c, text: comment, edited: true } : c
+              c.id === commentId ? { ...c, text: comment.trim(), edited: true } : c
             )
           };
         }
@@ -1319,7 +1394,7 @@ const ProjectManagementApp = ({
           [taskId]: [
             {
               id: Date.now(),
-              text: comment,
+              text: comment.trim(),
               author: session?.user?.name || 'Anonymous',
               timestamp: new Date().toISOString(),
               user_id: session.user.id
@@ -1384,22 +1459,24 @@ const ProjectManagementApp = ({
     try {
       if (!effectiveNewProjectName.trim()) return;
       
-      // Create project object first
-      const project = {
+      // Create a project object with current values
+      const projectToCreate = {
+        ...newProject,
         name: effectiveNewProjectName.trim(),
-        workspace_id: workspace.id, // Use workspace from component props
+        workspace_id: workspace?.id || '',
         user_id: session?.user?.id
       };
       
-      console.log("Creating project with:", project);
+      console.log("Creating project with:", projectToCreate);
       
       // Call createProject with the project object directly
-      const projectId = await db.createProject(project);
+      const projectId = await db.createProject(projectToCreate);
       console.log("Project created with ID:", projectId);
       
       // Clear the form and close the dialog
       effectiveSetNewProjectName('');
-      effectiveSetProjectDialog(false);
+      setNewProject({ name: '', workspace_id: workspace?.id || '' });
+      effectiveSetProjectDialogOpen(false); // Fixed variable name here
       
       // Reload projects
       await loadProjects();
@@ -1409,26 +1486,44 @@ const ProjectManagementApp = ({
     }
   };
 
-  // 4. Fix Supabase error handling
-  // Add better error handling for Supabase operations
+  // Improved error handling for Supabase operations
   const handleSupabaseError = (error, operation) => {
     console.error(`Supabase error during ${operation}:`, error);
     
+    // Set a more specific error message in the component state
+    let errorMessage = `Error during ${operation}. Please try again later.`;
+    
     // Check if it's a connection error
     if (error.message?.includes('network') || error.code === 'NETWORK_ERROR') {
-      alert('Network error. Please check your connection and try again.');
+      errorMessage = 'Network error. Please check your connection and try again.';
+      setError(errorMessage);
       return;
     }
     
     // Check for authentication errors
     if (error.status === 401 || error.code === 'PGRST301') {
-      alert('Your session has expired. Please log in again.');
+      errorMessage = 'Your session has expired. Please log in again.';
+      setError(errorMessage);
       onLogout(); // Log the user out if their session is invalid
       return;
     }
     
+    // Check for foreign key constraint errors
+    if (error.message?.includes('foreign key constraint') || error.code === 'PGRST116') {
+      errorMessage = 'Database relationship error. This might be due to missing or invalid data.';
+      setError(errorMessage);
+      return;
+    }
+    
+    // Check for permission errors
+    if (error.status === 403 || error.code === 'PGRST109') {
+      errorMessage = 'You do not have permission to perform this action.';
+      setError(errorMessage);
+      return;
+    }
+    
     // Generic error message
-    alert(`Error during ${operation}. Please try again later.`);
+    setError(errorMessage);
   };
 
   // Find the function that generates avatar colors based on user name
@@ -1829,6 +1924,7 @@ const ProjectManagementApp = ({
                                                     </div>
                                                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusColor(task.status)}`}></div>
                       <Input
+                                                      id={`task-title-${task.id}`}
                                                       value={task.title}
                                                       onChange={(e) => {
                                                         // Update locally for immediate feedback
@@ -1847,10 +1943,18 @@ const ProjectManagementApp = ({
                                                           return p;
                                                         });
                                                         setProjects(updatedProjects);
+                                                        
+                                                        // Save to database after a short delay (debounce)
+                                                        if (updateTaskTitleTimeout.current) {
+                                                          clearTimeout(updateTaskTitleTimeout.current);
+                                                        }
+                                                        updateTaskTitleTimeout.current = setTimeout(() => {
+                                                          updateTaskTitle(task.id, e.target.value);
+                                                        }, 500);
                                                       }}
                                                       onBlur={(e) => updateTaskTitle(task.id, e.target.value)}
                                                       className="flex-1 bg-transparent border-none text-gray-900 dark:text-gray-100 font-medium p-0 h-7 pl-2 shadow-none"
-                                                      placeholder="Task title"
+                                                      placeholder="Enter task title"
                                                     />
                                                   </div>
                                                   
@@ -2010,7 +2114,7 @@ const ProjectManagementApp = ({
                         variant="ghost" 
                         size="sm"
                                                                     className="h-6 w-6 p-0 flex-shrink-0" 
-                                                                    onClick={() => setEditingComment(comment)}
+                                                                    onClick={() => setEditingComment(comment.id)}
                                                                   >
                                                                     <PencilIcon className="h-3 w-3 text-gray-500" />
                                                                   </Button>

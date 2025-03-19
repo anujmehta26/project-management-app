@@ -1,15 +1,15 @@
 'use client'
 
 import React from 'react';
-import { Button } from './ui/button';
-import {
+import {  Button  } from '@/components/ui/button';
+import { 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from './ui/dropdown-menu';
+ } from '@/components/ui/dropdown-menu';
 import { CircleUserRound, Settings, LogOut } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
 

@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  swcMinify: true,
   // Configure webpack to properly handle CSS and extensions
   webpack: (config) => {
     // Add proper extensions

@@ -17,16 +17,16 @@ import {
   ChevronLeft,
   Plus
 } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn } from '@/lib/utils';
 import { useSession } from 'next-auth/react';
 import { db } from '../lib/database';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
+import {  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter  } from '@/components/ui/dialog';
+import {  Button  } from '@/components/ui/button';
+import {  Input  } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 import { getWorkspaceColor } from '../lib/utils';
-import { Separator } from './ui/separator';
-import { ScrollArea } from './ui/scroll-area';
+import {  Separator  } from '@/components/ui/separator';
+import {  ScrollArea  } from '@/components/ui/scroll-area';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const Sidebar = ({ 

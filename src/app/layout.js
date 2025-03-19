@@ -1,15 +1,13 @@
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { Providers } from "./providers";
+import './globals.css';
+import { Inter } from 'next/font/google';
+import { AuthProvider } from './providers';
+import { ThemeProvider } from '@/lib/theme-config';
 
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-});
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
-  title: "ProManage - Project Management",
-  description: "A modern project management application",
+  title: 'Project Management App',
+  description: 'A comprehensive project management application',
 };
 
 export default function RootLayout({ children }) {
@@ -20,9 +18,11 @@ export default function RootLayout({ children }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className={inter.className}>
-        <Providers>
-          {children}
-        </Providers>
+        <AuthProvider>
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );

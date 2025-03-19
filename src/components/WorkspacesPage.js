@@ -1,26 +1,26 @@
 'use client'
 
 import React, { useState, useEffect } from 'react';
-import { Button } from './ui/button';
-import { Card } from './ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "./ui/dialog";
-import { Input } from './ui/input';
+import {  Button  } from '@/components/ui/button';
+import {  Card  } from '@/components/ui/card';
+import {  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose  } from '@/components/ui/dialog';
+import {  Input  } from '@/components/ui/input';
 import { PlusCircle, Search, Folder, Star, ChevronDown, MoreHorizontal, Edit, Trash2, ChevronLeft, ChevronRight, Home, Briefcase } from 'lucide-react';
 import UserMenu from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
-import {
+import { 
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-} from './ui/dropdown-menu';
+ } from '@/components/ui/dropdown-menu';
 import LayoutWrapper from './LayoutWrapper';
 import { useSession } from 'next-auth/react';
 import { db } from '../lib/database';
 import { getWorkspaceColor } from '../lib/utils';
 import { useRouter } from 'next/navigation';
-import { Label } from './ui/label';
+import {  Label  } from '@/components/ui/label';
 
 const WorkspacesPage = ({ onSelectWorkspace, onLogout }) => {
   const { data: session } = useSession();
@@ -41,6 +41,9 @@ const WorkspacesPage = ({ onSelectWorkspace, onLogout }) => {
   const [projects, setProjects] = useState([]);
   const [projectCounts, setProjectCounts] = useState({});
   const router = useRouter();
+  const [error, setError] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -62,10 +65,25 @@ const WorkspacesPage = ({ onSelectWorkspace, onLogout }) => {
 
   const loadProjects = async () => {
     try {
+      if (!session?.user?.id) {
+        console.error('User ID is required for loadProjects');
+        return;
+      }
+      
+      console.log('Loading projects for user:', session.user.id);
       const projectData = await db.getProjects(session.user.id);
+      
+      if (!projectData) {
+        console.error('No project data returned from db.getProjects');
+        setProjects([]);
+        return;
+      }
+      
+      console.log('Projects loaded successfully:', projectData);
       setProjects(projectData || []);
     } catch (error) {
       console.error('Failed to load projects:', error);
+      setProjects([]);
     }
   };
 
@@ -79,32 +97,41 @@ const WorkspacesPage = ({ onSelectWorkspace, onLogout }) => {
   };
 
   const createWorkspace = async () => {
+    if (!newWorkspaceName.trim()) {
+      setError('Workspace name is required');
+      return;
+    }
+    
+    setIsCreating(true);
+    setError('');
+    
     try {
-      if (!newWorkspaceName.trim()) return;
+      console.log('Creating workspace with session:', session);
       
-      const userId = session?.user?.id;
-      
-      console.log("Creating workspace with user ID:", userId);
-      
-      if (!userId) {
-        console.error("User session not available");
-        alert("Please sign in to create a workspace");
-        return;
+      if (!session?.user?.id) {
+        throw new Error('You must be logged in to create a workspace');
       }
       
       const result = await db.createWorkspace({
         name: newWorkspaceName.trim(),
-        userId: userId
+        userId: session.user.id
       });
       
-      console.log("Workspace created successfully:", result);
+      console.log('Workspace created:', result);
+      
+      setWorkspaces(prev => [result, ...prev]);
       
       setNewWorkspaceName('');
       setDialogOpen(false);
       await loadWorkspaces();
+      
+      setSuccessMessage('Workspace created successfully!');
+      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (error) {
-      console.error('Failed to create workspace:', error);
-      alert(`Failed to create workspace: ${error.message}`);
+      console.error('Error creating workspace:', error);
+      setError(error.message || 'Failed to create workspace');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -440,10 +467,10 @@ const WorkspacesPage = ({ onSelectWorkspace, onLogout }) => {
             </Button>
             <Button
               onClick={createWorkspace}
-              disabled={!newWorkspaceName.trim()}
+              disabled={!newWorkspaceName.trim() || isCreating}
               className="bg-blue-600 text-white hover:bg-blue-700 transition-colors"
             >
-              Create
+              {isCreating ? 'Creating...' : 'Create'}
             </Button>
           </DialogFooter>
         </DialogContent>

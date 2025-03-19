@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Check, User } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { cn } from '@/lib/utils';
 
 const MentionInput = ({ value, onChange, users }) => {
   const [showDropdown, setShowDropdown] = useState(false);

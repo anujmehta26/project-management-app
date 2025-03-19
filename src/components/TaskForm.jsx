@@ -1,15 +1,15 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Textarea } from './ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Calendar } from 'lucide-react'
-import { Label } from './ui/label'
+import { Label } from '@/components/ui/label'
 import { useSession } from 'next-auth/react'
 import { db } from '../lib/database'
-import { cn } from '../lib/utils'
+import { cn } from '@/lib/utils'
 
 const TaskForm = ({ 
   projectId, 
@@ -86,7 +86,7 @@ const TaskForm = ({
   
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
+      <div className="space-y-2">
         <Label htmlFor="title">Title</Label>
         <Input
           id="title"
@@ -97,7 +97,7 @@ const TaskForm = ({
         />
       </div>
       
-      <div>
+      <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
         <Textarea
           id="description"
@@ -109,7 +109,7 @@ const TaskForm = ({
       </div>
       
       <div className="grid grid-cols-2 gap-4">
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="status">Status</Label>
           <Select value={status} onValueChange={setStatus}>
             <SelectTrigger id="status">
@@ -125,7 +125,7 @@ const TaskForm = ({
           </Select>
         </div>
         
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="priority">Priority</Label>
           <Select value={priority} onValueChange={setPriority}>
             <SelectTrigger id="priority">
@@ -141,7 +141,7 @@ const TaskForm = ({
       </div>
       
       <div className="grid grid-cols-2 gap-4">
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="dueDate">Due Date</Label>
           <DatePickerField
             id="dueDate"
@@ -151,7 +151,7 @@ const TaskForm = ({
           />
         </div>
         
-        <div>
+        <div className="space-y-2">
           <Label htmlFor="estimatedHours">Estimated Hours</Label>
           <Input
             id="estimatedHours"
@@ -164,7 +164,7 @@ const TaskForm = ({
         </div>
       </div>
       
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="flex justify-end gap-2 pt-4">
         {onCancel && (
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
@@ -186,13 +186,13 @@ const DatePickerField = ({
 }) => {
   return (
     <div className="relative">
-      <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
+      <div className="absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
         <Calendar className="h-4 w-4 text-gray-500" />
       </div>
-      <input
+      <Input
         id={id}
         type="date"
-        className="w-full pl-10 py-2 border rounded-md"
+        className="pl-10"
         value={selected ? selected.toISOString().split('T')[0] : ''}
         onChange={(e) => {
           if (e.target.value) {
