@@ -97,6 +97,73 @@ create table public.calendar_events (
   visibility text default 'private'
 );
 
+-- Create workspace_members table
+CREATE TABLE IF NOT EXISTS workspace_members (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('Owner', 'Admin', 'Member', 'Viewer')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  invitation_status TEXT NOT NULL DEFAULT 'Pending' CHECK (invitation_status IN ('Pending', 'Accepted', 'Rejected')),
+  invitation_email TEXT,
+  UNIQUE(workspace_id, user_id)
+);
+
+-- Create an index for faster queries
+CREATE INDEX IF NOT EXISTS workspace_members_workspace_id_idx ON workspace_members(workspace_id);
+CREATE INDEX IF NOT EXISTS workspace_members_user_id_idx ON workspace_members(user_id);
+
+-- Create a function to automatically add workspace creator as Owner
+CREATE OR REPLACE FUNCTION add_workspace_owner() RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO workspace_members (workspace_id, user_id, role, invitation_status)
+  VALUES (NEW.id, NEW.user_id, 'Owner', 'Accepted');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a trigger to automatically add workspace creator as Owner
+DROP TRIGGER IF EXISTS add_workspace_owner_trigger ON workspaces;
+CREATE TRIGGER add_workspace_owner_trigger
+AFTER INSERT ON workspaces
+FOR EACH ROW
+EXECUTE FUNCTION add_workspace_owner();
+
+-- Create a function to update workspace member count
+CREATE OR REPLACE FUNCTION update_workspace_member_count() RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' AND NEW.invitation_status = 'Accepted' THEN
+    UPDATE workspaces SET member_count = member_count + 1 WHERE id = NEW.workspace_id;
+  ELSIF TG_OP = 'DELETE' AND OLD.invitation_status = 'Accepted' THEN
+    UPDATE workspaces SET member_count = member_count - 1 WHERE id = OLD.workspace_id;
+  ELSIF TG_OP = 'UPDATE' AND NEW.invitation_status = 'Accepted' AND OLD.invitation_status != 'Accepted' THEN
+    UPDATE workspaces SET member_count = member_count + 1 WHERE id = NEW.workspace_id;
+  ELSIF TG_OP = 'UPDATE' AND NEW.invitation_status != 'Accepted' AND OLD.invitation_status = 'Accepted' THEN
+    UPDATE workspaces SET member_count = member_count - 1 WHERE id = NEW.workspace_id;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers to update workspace member count
+DROP TRIGGER IF EXISTS update_workspace_member_count_insert ON workspace_members;
+CREATE TRIGGER update_workspace_member_count_insert
+AFTER INSERT ON workspace_members
+FOR EACH ROW
+EXECUTE FUNCTION update_workspace_member_count();
+
+DROP TRIGGER IF EXISTS update_workspace_member_count_delete ON workspace_members;
+CREATE TRIGGER update_workspace_member_count_delete
+AFTER DELETE ON workspace_members
+FOR EACH ROW
+EXECUTE FUNCTION update_workspace_member_count();
+
+DROP TRIGGER IF EXISTS update_workspace_member_count_update ON workspace_members;
+CREATE TRIGGER update_workspace_member_count_update
+AFTER UPDATE OF invitation_status ON workspace_members
+FOR EACH ROW
+EXECUTE FUNCTION update_workspace_member_count();
+
 -- Create function to handle new users
 create or replace function public.handle_new_user () returns trigger as $$
 begin

@@ -175,19 +175,25 @@ const WeekView = React.memo(({ date, events, onEventClick, onDateClick, renderEv
                 {format(day, 'EEE')}
               </div>
               <div className={`text-sm ${isToday ? 'text-blue-600 dark:text-blue-400' : ''}`}>
-                {format(day, 'd')}
-              </div>
+              {format(day, 'd')}
             </div>
+          </div>
             
             <div 
-              className="flex-1 p-1 overflow-y-auto cursor-pointer"
-              onClick={() => onDateClick(day)}
+              className="flex-1 p-1 overflow-y-auto"
+              onClick={(e) => {
+                // Only trigger date click if clicking directly on the container, 
+                // not on child events
+                if (e.target === e.currentTarget) {
+                  onDateClick(day);
+                }
+              }}
             >
               {dayEvents.map(event => renderEvent(event, true))}
             </div>
-          </div>
-        );
-      })}
+            </div>
+          );
+        })}
     </div>
   );
 });
@@ -224,47 +230,53 @@ const MonthView = React.memo(({ date, events, onEventClick, onDateClick, renderE
       </div>
       
       <div className="flex-1 grid grid-rows-6 h-full">
-        {weeks.map((week, weekIndex) => (
+          {weeks.map((week, weekIndex) => (
           <div key={weekIndex} className="grid grid-cols-7 divide-x divide-gray-200 dark:divide-gray-700 h-full">
-            {week.map(day => {
-              const dayEvents = events.filter(event => 
+              {week.map(day => {
+                const dayEvents = events.filter(event => 
                 isSameDay(new Date(event.start), day)
-              );
+                );
               
               const isCurrentMonth = isSameMonth(day, date);
               const isToday = isSameDay(day, new Date());
-              
-              return (
-                <div 
+                
+                return (
+                  <div 
                   key={format(day, 'yyyy-MM-dd')} 
                   className={`
                     p-1 flex flex-col h-full overflow-hidden border-b border-gray-200 dark:border-gray-700
                     ${!isCurrentMonth ? 'bg-gray-50 dark:bg-gray-800/50 text-gray-400 dark:text-gray-600' : ''}
                     ${isToday ? 'bg-blue-50 dark:bg-blue-900/10' : ''}
                   `}
-                  onClick={() => onDateClick(day)}
+                  onClick={(e) => {
+                    // Only trigger date click if clicking directly on the container,
+                    // not on child events
+                    if (e.target === e.currentTarget) {
+                      onDateClick(day);
+                    }
+                  }}
                 >
                   <div className={`
                     text-xs font-medium mb-1 self-end h-5 w-5 flex items-center justify-center rounded-full
                     ${isToday ? 'bg-blue-600 text-white' : ''}
                   `}>
-                    {format(day, 'd')}
-                  </div>
+                      {format(day, 'd')}
+                    </div>
                   
                   <div className="flex-1 overflow-y-auto space-y-1">
                     {dayEvents.slice(0, 3).map(event => renderEvent(event, true))}
-                    
-                    {dayEvents.length > 3 && (
+                      
+                      {dayEvents.length > 3 && (
                       <div className="text-xs text-gray-500 dark:text-gray-400 pl-1">
-                        +{dayEvents.length - 3} more
-                      </div>
-                    )}
+                          +{dayEvents.length - 3} more
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
-        ))}
+          ))}
       </div>
     </div>
   );
@@ -307,7 +319,7 @@ const Calendar = () => {
       let userEvents = [];
       try {
         userEvents = await db.getUserEvents(
-          session.user.id, 
+        session.user.id,
           format(viewStart, 'yyyy-MM-dd'), 
           format(viewEnd, 'yyyy-MM-dd')
         );
@@ -406,7 +418,7 @@ const Calendar = () => {
             console.log(`Found ${teammates.length} teammates`);
             const teammateIds = teammates.map(teammate => teammate.id);
             
-            teammateEvents = await db.getTeammateEvents(
+        teammateEvents = await db.getTeammateEvents(
               teammateIds, 
               format(viewStart, 'yyyy-MM-dd'), 
               format(viewEnd, 'yyyy-MM-dd')
@@ -463,14 +475,14 @@ const Calendar = () => {
     setSelectedDate(new Date(event.start));
     setShowEventDialog(true);
   }, []);
-
+  
   // Handle date cell click
   const handleDateClick = useCallback((date) => {
     setSelectedDate(date);
     setSelectedEvent(null);
     setShowEventDialog(true);
   }, []);
-
+  
   // Handle event added
   const handleEventAdded = useCallback((newEvent) => {
     setEvents(prev => [...prev, newEvent]);
@@ -622,7 +634,7 @@ const Calendar = () => {
         );
       case 'month':
       default:
-        return (
+    return (
           <MonthView 
             date={date} 
             events={events} 
@@ -664,8 +676,8 @@ const Calendar = () => {
                 }
               })}
             >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -683,8 +695,8 @@ const Calendar = () => {
                 }
               })}
             >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
           </div>
           <h2 className="text-xl font-semibold ml-2">
             {format(date, view === 'day' ? 'MMMM d, yyyy' : view === 'week' ? "'Week of' MMMM d, yyyy" : 'MMMM yyyy')}
@@ -735,7 +747,7 @@ const Calendar = () => {
                   <p className="text-gray-500 dark:text-gray-400 text-center mb-4">{error}</p>
                   <Button onClick={loadCalendarData} className="w-full">
                     Try Again
-                  </Button>
+                </Button>
                 </div>
               </div>
             </div>
@@ -787,8 +799,8 @@ const Calendar = () => {
                         <CalendarIcon className="h-3 w-3 mr-1" />
                         {format(new Date(event.start), 'MMM d')}
                       </div>
-                    </div>
-                  ))}
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>

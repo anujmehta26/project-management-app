@@ -37,7 +37,8 @@ const Sidebar = ({
   collapsed = false, 
   onToggleCollapse, 
   onNavigateToDashboard,
-  onNavigateToWorkspaces
+  onNavigateToWorkspaces,
+  onInviteMembers
 }) => {
   const { data: session } = useSession();
   const [workspaces, setWorkspaces] = useState([]);

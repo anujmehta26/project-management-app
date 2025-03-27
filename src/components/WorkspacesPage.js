@@ -5,7 +5,7 @@ import {  Button  } from '@/components/ui/button';
 import {  Card  } from '@/components/ui/card';
 import {  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose  } from '@/components/ui/dialog';
 import {  Input  } from '@/components/ui/input';
-import { PlusCircle, Search, Folder, Star, ChevronDown, MoreHorizontal, Edit, Trash2, ChevronLeft, ChevronRight, Home, Briefcase } from 'lucide-react';
+import { PlusCircle, Search, Folder, Star, ChevronDown, MoreHorizontal, Edit, Trash2, ChevronLeft, ChevronRight, Home, Briefcase, UserPlus } from 'lucide-react';
 import UserMenu from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
 import { 
@@ -446,6 +446,9 @@ const WorkspacesPage = ({ onSelectWorkspace, onLogout }) => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create Workspace</DialogTitle>
+            <DialogDescription>
+              Create a workspace to organize your projects and collaborate with team members.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2 pb-4">
             <div className="space-y-2">
@@ -457,6 +460,27 @@ const WorkspacesPage = ({ onSelectWorkspace, onLogout }) => {
                 onChange={(e) => setNewWorkspaceName(e.target.value)}
               />
             </div>
+            
+            {/* Add information about collaboration */}
+            <div className="flex bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md">
+              <div className="mr-3 flex-shrink-0 mt-1">
+                <UserPlus className="h-5 w-5 text-blue-500" />
+              </div>
+              <div>
+                <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">Team Collaboration</h4>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                  After creating your workspace, you can invite team members to collaborate. 
+                  Each member can have different access levels.
+                </p>
+              </div>
+            </div>
+
+            {error && (
+              <div className="text-red-500 text-sm">{error}</div>
+            )}
+            {successMessage && (
+              <div className="text-green-500 text-sm">{successMessage}</div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -470,7 +494,7 @@ const WorkspacesPage = ({ onSelectWorkspace, onLogout }) => {
               disabled={!newWorkspaceName.trim() || isCreating}
               className="bg-blue-600 text-white hover:bg-blue-700 transition-colors"
             >
-              {isCreating ? 'Creating...' : 'Create'}
+              {isCreating ? 'Creating...' : 'Create Workspace'}
             </Button>
           </DialogFooter>
         </DialogContent>
